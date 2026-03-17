@@ -1,8 +1,4 @@
-// ############################################################
-// ##                                                        ##
-// ##   riscv_core.v                                         ##
-// ##   RV32I/M/E  —  3-stage in-order pipeline             ##
-// ##   Stages: IF/ID  |  EX  |  WB                         ##
+/
 // ##                                                        ##
 // ##   Extensions controlled by parameters:                 ##
 // ##     RV32M  – multiply / divide (MULH, DIV, REM …)     ##
