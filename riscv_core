@@ -1,10 +1,5 @@
 /
-// ##                                                        ##
-// ##   Extensions controlled by parameters:                 ##
-// ##     RV32M  – multiply / divide (MULH, DIV, REM …)     ##
-// ##     RV32E  – embedded ISA (16 integer registers)       ##
-// ##     RV32B  – bit-manipulation (stub, reserved)         ##
-// ##     RV32C  – compressed instructions (stub, reserved)  ##
+
 // ##                                                        ##
 // ##   Key design choices:                                  ##
 // ##     * csr_op() function: single point for R/S/C ops    ##
