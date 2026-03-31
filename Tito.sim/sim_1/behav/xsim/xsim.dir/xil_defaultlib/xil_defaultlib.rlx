@@ -1,0 +1,7 @@
+0.7
+2020.2
+May 22 2025
+00:13:55
+C:/Users/ENRMKHAN/Tito/Tito.sim/sim_1/behav/xsim/glbl.v,1741209010,verilog,,,,glbl,,,,,,,,
+C:/Users/ENRMKHAN/Tito/Tito.srcs/sim_1/new/tb_riscv_core.v,1774973404,verilog,,,,tb_riscv_core,,,../../../../../../../Xilinx/2025.1/Vivado/data/rsb/busdef,,,,,
+C:/Users/ENRMKHAN/Tito/Tito.srcs/sources_1/new/risc_core.v,1774973127,verilog,,C:/Users/ENRMKHAN/Tito/Tito.srcs/sim_1/new/tb_riscv_core.v,,riscv_core,,,../../../../../../../Xilinx/2025.1/Vivado/data/rsb/busdef,,,,,
