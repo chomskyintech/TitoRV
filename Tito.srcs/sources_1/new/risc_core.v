@@ -54,7 +54,7 @@ always @(posedge clk or negedge resetb) begin
     end
 end
 
-// ────────────── Instruction opcode constants ───────────────
+// Instruction opcode constants 
 localparam OP_LUI    = 7'b0110111;
 localparam OP_AUIPC  = 7'b0010111;
 localparam OP_JAL    = 7'b1101111;
@@ -76,7 +76,7 @@ localparam F3_OR      = 3'b110;
 localparam F3_AND     = 3'b111;
 localparam F3_SR      = 3'b101;  // SRLI/SRAI
 
-// ────────────── Pipeline registers ───────────────
+// Pipeline registers 
 reg [31:0] pc_fetch, pc_id, pc_ex, pc_wb;
 reg [31:0] ex_insn, ex_imm;
 reg [4:0]  ex_rs1, ex_rs2, ex_rd;
@@ -88,15 +88,16 @@ reg        ex_illegal;
 reg stall_q, flush_q;
 reg exception;
 
-// ────────────── Register file ───────────────
+// Register file 
 localparam RF_DEPTH = (RV32E==1) ? 16 : 32;
 reg [31:0] rf [RF_DEPTH-1:1];
 
-// ────────────── Memory handshake ───────────────
+//  Memory handshake 
 assign dmem_rready = ex_load;
 assign dmem_wready = ex_store;
 
-// ────────────── Fetch logic ───────────────
+// Fetch logic 
+
 always @(posedge clk or negedge resetb) begin
     if(!resetb) begin
         pc_fetch <= RESETVEC;
@@ -107,7 +108,7 @@ always @(posedge clk or negedge resetb) begin
     end
 end
 
-// ────────────── Immediate decode ───────────────
+// Immediate decode 
 always @* begin
     ex_imm = 32'd0;
     if(!stall_q) begin
@@ -121,7 +122,7 @@ always @* begin
     end
 end
 
-// ────────────── ID → EX pipeline ───────────────
+// ID → EX pipeline 
 always @(posedge clk or negedge resetb) begin
     if(!resetb) begin
         ex_insn <= NOP; ex_rs1 <= 0; ex_rs2 <= 0; ex_rd <= 0;
@@ -154,7 +155,7 @@ always @(posedge clk or negedge resetb) begin
     end
 end
 
-// ────────────── ALU (EX stage) ───────────────
+// ALU (EX stage) 
 wire [31:0] alu_a = (ex_rs1==0) ? 0 : rf[ex_rs1];
 wire [31:0] alu_b = ex_alu_op ? ((ex_fn3==F3_SR)? {{27{1'b0}}, ex_insn[24:20]} : ex_imm) : (ex_rs2==0 ? 0 : rf[ex_rs2]);
 reg  [31:0] alu_out;
@@ -176,7 +177,7 @@ always @* begin
     else if(ex_jal || ex_jalr) alu_out = pc_id + 4;
 end
 
-// ────────────── WB stage ───────────────
+// WB stage 
 always @(posedge clk) begin
     if(!stall) begin
         if(ex_rd != 0) rf[ex_rd] <= alu_out;
