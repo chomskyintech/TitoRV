@@ -1,0 +1,8 @@
+qrun.out/
+*.log
+*.vcd
+result.zip
+quartus/
+work/
+transcript
+modelsim.ini.bak
