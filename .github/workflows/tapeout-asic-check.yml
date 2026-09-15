@@ -1,0 +1,35 @@
+name: Tapeout ASIC RTL check
+
+on:
+  push:
+    branches: [tapeout-cleanup]
+    paths:
+      - 'tapeout_project/asic/**'
+      - '.github/workflows/tapeout-asic-check.yml'
+  pull_request:
+    paths:
+      - 'tapeout_project/asic/**'
+
+jobs:
+  rtl-check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install RTL tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y iverilog yosys
+      - name: Smoke simulation
+        working-directory: tapeout_project/asic
+        run: |
+          iverilog -g2012 -o simv \
+            rtl/riscv_core.v \
+            rtl/instr_mem.v \
+            rtl/riscv_system_top.v \
+            rtl/axi_lite_ram.v \
+            rtl/tapeout_top.v \
+            sim/tb_smoke.v
+          vvp simv
+      - name: Generic synthesis check
+        working-directory: tapeout_project/asic/synth
+        run: yosys -s synth.ys

@@ -1,0 +1,13 @@
+read_verilog ../rtl/riscv_core.v
+read_verilog ../rtl/instr_mem.v
+read_verilog ../rtl/riscv_system_top.v
+read_verilog ../rtl/axi_lite_ram.v
+read_verilog ../rtl/tapeout_top.v
+
+hierarchy -check -top tapeout_top
+proc
+opt
+memory
+opt
+check
+stat
