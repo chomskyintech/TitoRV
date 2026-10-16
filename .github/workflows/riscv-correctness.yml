@@ -1,0 +1,24 @@
+name: TitoRV directed correctness
+
+on:
+  push:
+    branches:
+      - master
+      - verification/riscv-directed-tests
+  pull_request:
+    branches:
+      - master
+
+jobs:
+  directed-correctness:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Icarus Verilog
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y iverilog
+      - name: Compile directed test
+        run: iverilog -g2012 -Wall -s tb_riscv_correctness -o /tmp/titorv-test tapeout_project/riscv_core.v tapeout_project/riscv_correctness_tb.sv
+      - name: Run directed test
+        run: vvp /tmp/titorv-test
