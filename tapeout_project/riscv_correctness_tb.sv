@@ -9,6 +9,9 @@ module tb_riscv_correctness;
 
     wire [31:0] instr_addr;
     reg  [31:0] instr_rdata;
+    wire        trap_valid;
+    wire [31:0] trap_pc;
+    wire [31:0] trap_cause;
 
     wire [31:0] M_AXI_AWADDR;
     wire        M_AXI_AWVALID;
@@ -59,6 +62,9 @@ module tb_riscv_correctness;
         .resetb(resetb),
         .instr_addr(instr_addr),
         .instr_rdata(instr_rdata),
+        .trap_valid(trap_valid),
+        .trap_pc(trap_pc),
+        .trap_cause(trap_cause),
         .M_AXI_AWADDR(M_AXI_AWADDR),
         .M_AXI_AWVALID(M_AXI_AWVALID),
         .M_AXI_AWREADY(M_AXI_AWREADY),
@@ -293,15 +299,14 @@ module tb_riscv_correctness;
         rom[88] = 32'h00201523; // sh   x2, 10(x0): upper halfword of word 2
         rom[89] = 32'h00a01c03; // lh   x24, 10(x0) => 10
         rom[90] = 32'h00a05c83; // lhu  x25, 10(x0) => 10
-        // Reserved/unsupported encodings must not alias valid operations.
-        // This core has no trap interface yet, so these checks only assert
-        // suppression of unintended register writes and memory transactions.
-        rom[91] = 32'h02208d33; // invalid R-type funct7=0000001; must not change x26
-        rom[92] = 32'h02209e13; // invalid SLLI upper immediate bits; must not change x28
-        rom[93] = 32'h00003d83; // invalid LOAD funct3=011; must not launch AXI read
-        rom[94] = 32'h00203023; // invalid STORE funct3=011; must not launch AXI write
+        // Finish the ordinary regression, then execute a reserved R-type
+        // encoding. The core must report cause 2 and freeze at the fault PC.
+        rom[91] = 32'h00000013; // NOP
+        rom[92] = 32'h00000013; // NOP
+        rom[93] = 32'h00000013; // NOP
+        rom[94] = 32'h00000013; // NOP
         rom[95] = 32'h00942023; // sw x9, 0(x8): completion signature
-        rom[96] = 32'h0000006f; // terminal loop
+        rom[96] = 32'h02208d33; // invalid R-type funct7=0000001 => illegal instruction
         rom[100] = 32'h0000006f; // failure loop (watchdog must fire)
 
         repeat (5) @(posedge clk);
@@ -310,7 +315,8 @@ module tb_riscv_correctness;
 
     // Signature is written to byte address 1020 (word index 255).
     always @(posedge clk) begin
-        if (resetb && !finished && dmem[255] == 32'h00000055 &&
+        if (resetb && !finished && trap_valid &&
+            dmem[255] == 32'h00000055 &&
             b_handshake_count == 7 && r_handshake_count == 11) begin
             finished = 1'b1;
             #1;
@@ -321,6 +327,7 @@ module tb_riscv_correctness;
             $display("byte/halfword word=%08h", dmem[1]);
             $display("AXI handshakes AW=%0d W=%0d B=%0d AR=%0d R=%0d", aw_handshake_count, w_handshake_count, b_handshake_count, ar_handshake_count, r_handshake_count);
             $display("memory boundary words: dmem[1]=%08h dmem[2]=%08h", dmem[1], dmem[2]);
+            $display("trap_valid=%b trap_pc=%08h trap_cause=%0d", trap_valid, trap_pc, trap_cause);
 
             if (dut.rf[1] !== 32'd5 ||
                 dut.rf[2] !== 32'd10 ||
@@ -354,6 +361,9 @@ module tb_riscv_correctness;
                 dut.rf[30] !== 32'd10 ||
                 dut.rf[31] !== 32'd5 ||
                 dut.rf[0] !== 32'd0 ||
+                trap_valid !== 1'b1 ||
+                trap_pc !== 32'd384 ||
+                trap_cause !== 32'd2 ||
                 aw_handshake_count !== 7 ||
                 w_handshake_count !== 7 ||
                 ar_handshake_count !== 11 ||
@@ -366,7 +376,7 @@ module tb_riscv_correctness;
                 $display("FAIL: one or more architectural state checks mismatched.");
                 $fatal(1);
             end else begin
-                $display("PASS: arithmetic, branch boundaries, memory lanes, invalid-encoding suppression, AXI, and x0 checks passed.");
+                $display("PASS: arithmetic, branch boundaries, memory lanes, AXI, x0, and illegal-instruction trap checks passed.");
                 $finish;
             end
         end
