@@ -12,6 +12,11 @@ module riscv_core
     output reg  [31:0] instr_addr,
     input  wire [31:0] instr_rdata,
 
+    // Illegal-instruction exception reporting (cause 2).
+    output reg         trap_valid,
+    output reg  [31:0] trap_pc,
+    output reg  [31:0] trap_cause,
+
     // ============================================================
     // AXI-Lite Write Address
     // ============================================================
@@ -175,6 +180,25 @@ wire valid_load = (opcode == OP_LOAD) &&
      (funct3 == 3'b100) || (funct3 == 3'b101));
 wire valid_store = (opcode == OP_STORE) &&
     ((funct3 == 3'b000) || (funct3 == 3'b001) || (funct3 == 3'b010));
+wire valid_branch = (opcode == OP_BRANCH) &&
+    ((funct3 == 3'b000) || (funct3 == 3'b001) || (funct3 == 3'b100) ||
+     (funct3 == 3'b101) || (funct3 == 3'b110) || (funct3 == 3'b111));
+wire valid_jalr = (opcode == OP_JALR) && (funct3 == 3'b000);
+
+// Detect malformed encodings in implemented instruction classes. FENCE and
+// SYSTEM are legal RV32I opcode classes but are not implemented by this core;
+// they are intentionally not mislabeled as illegal by this decoder.
+wire illegal_instruction =
+    ((opcode == OP_ARITHI) && !valid_addi) ||
+    ((opcode == OP_ARITHR) && !valid_arithr) ||
+    ((opcode == OP_LOAD) && !valid_load) ||
+    ((opcode == OP_STORE) && !valid_store) ||
+    ((opcode == OP_BRANCH) && !valid_branch) ||
+    ((opcode == OP_JALR) && !valid_jalr) ||
+    !((opcode == OP_LUI) || (opcode == OP_JAL) || (opcode == OP_JALR) ||
+      (opcode == OP_AUIPC) || (opcode == OP_BRANCH) || (opcode == OP_LOAD) ||
+      (opcode == OP_STORE) || (opcode == OP_ARITHI) || (opcode == OP_ARITHR) ||
+      (opcode == 7'b0001111) || (opcode == 7'b1110011));
 
 // ============================================================
 // Register Reads
@@ -337,6 +361,9 @@ begin
         ex_pc    <= 32'd0;
         ex_insn  <= 32'h00000013;
         ex_valid <= 1'b0;
+        trap_valid <= 1'b0;
+        trap_pc <= 32'd0;
+        trap_cause <= 32'd0;
 
         axi_state <= AXI_IDLE;
         axi_rd    <= 5'd0;
@@ -551,7 +578,7 @@ end
         // after the AXI transaction finishes.
         //
         // =====================================================
-if(!pipe_stall)
+if(!pipe_stall && !trap_valid)
 begin
 
     // ---------------------------------------------------------
@@ -584,7 +611,21 @@ begin
     // EXECUTE
     // ---------------------------------------------------------
 
-    if(ex_valid)
+    if(ex_valid && illegal_instruction)
+    begin
+        trap_valid <= 1'b1;
+        trap_pc <= ex_pc;
+        trap_cause <= 32'd2;
+        pc <= ex_pc;
+        instr_addr <= ex_pc;
+        if_pc <= ex_pc;
+        ex_pc <= ex_pc;
+        if_insn <= 32'h00000013;
+        ex_insn <= 32'h00000013;
+        ex_valid <= 1'b0;
+        $display("ILLEGAL INSTRUCTION: pc=%h insn=%h cause=2", ex_pc, ex_insn);
+    end
+    else if(ex_valid)
     begin
       $display(
     "PIPE: PC=%h IF_PC=%h IF_INSN=%h EX_PC=%h EX_INSN=%h AXI_STATE=%0d",
