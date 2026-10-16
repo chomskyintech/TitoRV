@@ -221,7 +221,8 @@ module tb_riscv_correctness;
 
     // Signature is written to byte address 1020 (word index 255).
     always @(posedge clk) begin
-        if (resetb && !finished && dmem[255] == 32'h00000055) begin
+        if (resetb && !finished && dmem[255] == 32'h00000055 &&
+            b_handshake_count == 2 && r_handshake_count == 1) begin
             finished = 1'b1;
             #1;
             $display("TitoRV directed correctness test results:");
