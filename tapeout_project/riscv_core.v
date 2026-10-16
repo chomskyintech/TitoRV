@@ -58,6 +58,8 @@ localparam RESET_PC = 32'h0000_0000;
 
 localparam OP_LUI    = 7'b0110111;
 localparam OP_JAL    = 7'b1101111;
+localparam OP_JALR   = 7'b1100111;
+localparam OP_AUIPC  = 7'b0010111;
 localparam OP_BRANCH = 7'b1100011;
 localparam OP_LOAD   = 7'b0000011;
 localparam OP_STORE  = 7'b0100011;
@@ -130,9 +132,16 @@ wire [4:0] rd  = ex_insn[11:7];
 
 // Accept only encodings implemented by this core. Unsupported funct fields
 // must not alias ADDI/ADD/SUB or launch an unintended memory transaction.
-wire valid_addi = (opcode == OP_ARITHI) && (funct3 == 3'b000);
-wire valid_arithr = (opcode == OP_ARITHR) && (funct3 == 3'b000) &&
-                    ((funct7 == 7'b0000000) || (funct7 == 7'b0100000));
+wire valid_addi = (opcode == OP_ARITHI) &&
+    ((funct3 == 3'b000) || (funct3 == 3'b010) || (funct3 == 3'b011) ||
+     (funct3 == 3'b100) || (funct3 == 3'b110) || (funct3 == 3'b111) ||
+     ((funct3 == 3'b001) && (funct7 == 7'b0000000)) ||
+     ((funct3 == 3'b101) &&
+      ((funct7 == 7'b0000000) || (funct7 == 7'b0100000))));
+wire valid_arithr = (opcode == OP_ARITHR) &&
+    (((funct3 == 3'b000) && ((funct7 == 7'b0000000) || (funct7 == 7'b0100000))) ||
+     ((funct3 != 3'b000) && (funct7 == 7'b0000000)) ||
+     ((funct3 == 3'b101) && (funct7 == 7'b0100000)));
 wire valid_lw = (opcode == OP_LOAD) && (funct3 == 3'b010);
 wire valid_sw = (opcode == OP_STORE) && (funct3 == 3'b010);
 
@@ -205,19 +214,42 @@ begin
         // ADDI
         // --------------------------------------------------------
         OP_ARITHI:
-            if(valid_addi)
-                alu_out = rs1_data + imm_i;
+        begin
+            case (funct3)
+                3'b000: if (valid_addi) alu_out = rs1_data + imm_i;
+                3'b010: if (valid_addi) alu_out = ($signed(rs1_data) < $signed(imm_i)) ? 32'd1 : 32'd0;
+                3'b011: if (valid_addi) alu_out = (rs1_data < imm_i) ? 32'd1 : 32'd0;
+                3'b100: if (valid_addi) alu_out = rs1_data ^ imm_i;
+                3'b110: if (valid_addi) alu_out = rs1_data | imm_i;
+                3'b111: if (valid_addi) alu_out = rs1_data & imm_i;
+                3'b001: if (valid_addi) alu_out = rs1_data << ex_insn[24:20];
+                3'b101: if (valid_addi) begin
+                    if (funct7 == 7'b0100000)
+                        alu_out = $signed(rs1_data) >>> ex_insn[24:20];
+                    else
+                        alu_out = rs1_data >> ex_insn[24:20];
+                end
+                default: alu_out = 32'd0;
+            endcase
+        end
 
         // --------------------------------------------------------
         // ADD / SUB
         // --------------------------------------------------------
         OP_ARITHR:
         begin
-            if(valid_arithr) begin
-                if(funct7 == 7'b0100000)
-                    alu_out = rs1_data - rs2_data;
-                else
-                    alu_out = rs1_data + rs2_data;
+            if (valid_arithr) begin
+                case (funct3)
+                    3'b000: alu_out = (funct7 == 7'b0100000) ? rs1_data - rs2_data : rs1_data + rs2_data;
+                    3'b001: alu_out = rs1_data << rs2_data[4:0];
+                    3'b010: alu_out = ($signed(rs1_data) < $signed(rs2_data)) ? 32'd1 : 32'd0;
+                    3'b011: alu_out = (rs1_data < rs2_data) ? 32'd1 : 32'd0;
+                    3'b100: alu_out = rs1_data ^ rs2_data;
+                    3'b101: alu_out = (funct7 == 7'b0100000) ? $signed(rs1_data) >>> rs2_data[4:0] : rs1_data >> rs2_data[4:0];
+                    3'b110: alu_out = rs1_data | rs2_data;
+                    3'b111: alu_out = rs1_data & rs2_data;
+                    default: alu_out = 32'd0;
+                endcase
             end
         end
 
@@ -238,6 +270,9 @@ begin
         // --------------------------------------------------------
         OP_LUI:
             alu_out = imm_u;
+
+        OP_AUIPC:
+            alu_out = ex_pc + imm_u;
 
         default:
             alu_out = 32'd0;
@@ -534,7 +569,7 @@ begin
             // LUI
             // =================================================
 
-            OP_LUI:
+            OP_LUI, OP_AUIPC:
             begin
                 if(rd != 0)
                     rf[rd] <= alu_out;
@@ -568,17 +603,24 @@ begin
             // JAL
             // =================================================
 
-            OP_JAL:
+            OP_JAL, OP_JALR:
             begin
                 if(rd != 0)
                     rf[rd] <= ex_pc + 32'd4;
 
                 // Redirect fetch and flush both younger pipeline slots.
-                pc        <= ex_pc + imm_j;
-                instr_addr <= ex_pc + imm_j;
-                if_pc     <= ex_pc + imm_j;
+                if (opcode == OP_JALR && funct3 == 3'b000) begin
+                    pc         <= (rs1_data + imm_i) & 32'hffff_fffe;
+                    instr_addr <= (rs1_data + imm_i) & 32'hffff_fffe;
+                    if_pc      <= (rs1_data + imm_i) & 32'hffff_fffe;
+                    ex_pc      <= (rs1_data + imm_i) & 32'hffff_fffe;
+                end else if (opcode == OP_JAL) begin
+                    pc         <= ex_pc + imm_j;
+                    instr_addr <= ex_pc + imm_j;
+                    if_pc      <= ex_pc + imm_j;
+                    ex_pc      <= ex_pc + imm_j;
+                end
                 if_insn   <= 32'h00000013;
-                ex_pc     <= ex_pc + imm_j;
                 ex_insn   <= 32'h00000013;
                 ex_valid  <= 1'b1;
             end
@@ -589,9 +631,14 @@ begin
 
             OP_BRANCH:
             begin
-                if(funct3 == 3'b000)
+                if ((funct3 == 3'b000 && rs1_data == rs2_data) ||
+                    (funct3 == 3'b001 && rs1_data != rs2_data) ||
+                    (funct3 == 3'b100 && $signed(rs1_data) < $signed(rs2_data)) ||
+                    (funct3 == 3'b101 && $signed(rs1_data) >= $signed(rs2_data)) ||
+                    (funct3 == 3'b110 && rs1_data < rs2_data) ||
+                    (funct3 == 3'b111 && rs1_data >= rs2_data))
                 begin
-                    if(rs1_data == rs2_data) begin
+                    if (1'b1) begin
                         // A taken branch invalidates the sequential-path
                         // instructions already in IF and ID/EX.
                         pc         <= ex_pc + imm_b;
