@@ -293,8 +293,15 @@ module tb_riscv_correctness;
         rom[88] = 32'h00201523; // sh   x2, 10(x0): upper halfword of word 2
         rom[89] = 32'h00a01c03; // lh   x24, 10(x0) => 10
         rom[90] = 32'h00a05c83; // lhu  x25, 10(x0) => 10
-        rom[91] = 32'h00942023; // sw x9, 0(x8): completion signature
-        rom[92] = 32'h0000006f; // terminal loop
+        // Reserved/unsupported encodings must not alias valid operations.
+        // This core has no trap interface yet, so these checks only assert
+        // suppression of unintended register writes and memory transactions.
+        rom[91] = 32'h02208d33; // invalid R-type funct7=0000001; must not change x26
+        rom[92] = 32'h02209e13; // invalid SLLI upper immediate bits; must not change x28
+        rom[93] = 32'h00003d83; // invalid LOAD funct3=011; must not launch AXI read
+        rom[94] = 32'h00203023; // invalid STORE funct3=011; must not launch AXI write
+        rom[95] = 32'h00942023; // sw x9, 0(x8): completion signature
+        rom[96] = 32'h0000006f; // terminal loop
         rom[100] = 32'h0000006f; // failure loop (watchdog must fire)
 
         repeat (5) @(posedge clk);
@@ -359,7 +366,7 @@ module tb_riscv_correctness;
                 $display("FAIL: one or more architectural state checks mismatched.");
                 $fatal(1);
             end else begin
-                $display("PASS: arithmetic, branch boundaries, memory lanes, AXI, and x0 checks passed.");
+                $display("PASS: arithmetic, branch boundaries, memory lanes, invalid-encoding suppression, AXI, and x0 checks passed.");
                 $finish;
             end
         end
