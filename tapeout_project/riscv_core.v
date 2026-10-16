@@ -288,13 +288,13 @@ begin
         // Load address
         // --------------------------------------------------------
         OP_LOAD:
-            if(valid_lw) alu_out = rs1_data + imm_i;
+            if(valid_load) alu_out = rs1_data + imm_i;
 
         // --------------------------------------------------------
         // Store address
         // --------------------------------------------------------
         OP_STORE:
-            if(valid_sw) alu_out = rs1_data + imm_s;
+            if(valid_store) alu_out = rs1_data + imm_s;
 
         // --------------------------------------------------------
         // LUI
