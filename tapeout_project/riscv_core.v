@@ -502,7 +502,10 @@ begin
     if_pc   <= pc;
     if_insn <= instr_rdata;
 
-    instr_addr <= pc;
+    // The ROM output corresponds to the address held before this edge.
+    // Advance the address in lockstep with the PC so sampled instruction data
+    // and if_pc refer to the same word (avoids replaying the first instruction).
+    instr_addr <= pc + 32'd4;
 
     // ---------------------------------------------------------
     // ID -> EX
