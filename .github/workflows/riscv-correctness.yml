@@ -31,3 +31,10 @@ jobs:
               tapeout_project/riscv_core.v tapeout_project/riscv_correctness_tb.sv
             vvp /tmp/titorv-test-${case_id}
           done
+
+      - name: Compile and run machine CSR regression
+        run: |
+          iverilog -g2012 -Wall -s tb_riscv_csr \
+            -o /tmp/titorv-csr-test \
+            tapeout_project/riscv_core.v tapeout_project/riscv_csr_tb.sv
+          vvp /tmp/titorv-csr-test
