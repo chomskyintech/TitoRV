@@ -240,12 +240,13 @@ module tb_riscv_correctness;
         rom[44] = 32'h00605983; // lhu  x19, 6(x0) => 10
         // JALR must clear bit 0, write PC+4 to rd, and flush fall-through.
         rom[45] = 32'h00000b13; // addi x22, x0, 0 (clear sentinel)
-        rom[46] = 32'h0c000513; // addi x10, x0, 192 (target byte address)
+        rom[46] = 32'h0c800513; // addi x10, x0, 200 (target byte address)
         rom[47] = 32'h00050a67; // jalr x20, 0(x10), target rom[48]
         rom[48] = 32'h06300b13; // addi x22, x0, 99 (must be flushed)
-        rom[49] = 32'h02a00a93; // target: addi x21, x0, 42
-        rom[50] = 32'h00942023; // sw x9, 0(x8): completion signature
-        rom[51] = 32'h0000006f; // jal x0, 0
+        rom[49] = 32'h00000013; // NOP at link address
+        rom[50] = 32'h02a00a93; // target: addi x21, x0, 42
+        rom[51] = 32'h00942023; // sw x9, 0(x8): completion signature
+        rom[52] = 32'h0000006f; // jal x0, 0
 
         repeat (5) @(posedge clk);
         resetb = 1'b1;
@@ -254,7 +255,7 @@ module tb_riscv_correctness;
     // Signature is written to byte address 1020 (word index 255).
     always @(posedge clk) begin
         if (resetb && !finished && dmem[255] == 32'h00000055 &&
-            b_handshake_count == 4 && r_handshake_count == 7) begin
+            b_handshake_count == 5 && r_handshake_count == 7) begin
             finished = 1'b1;
             #1;
             $display("TitoRV directed correctness test results:");
@@ -272,7 +273,7 @@ module tb_riscv_correctness;
                 dut.rf[6] !== 32'h12345000 ||
                 dut.rf[8] !== 32'd1020 ||
                 dut.rf[9] !== 32'd85 ||
-                dut.rf[10] !== 32'd192 ||
+                dut.rf[10] !== 32'd200 ||
                 dut.rf[11] !== 32'd1 ||
                 dut.rf[12] !== 32'd85 ||
                 dut.rf[13] !== 32'd85 ||
@@ -296,10 +297,10 @@ module tb_riscv_correctness;
                 dut.rf[30] !== 32'd10 ||
                 dut.rf[31] !== 32'd5 ||
                 dut.rf[0] !== 32'd0 ||
-                aw_handshake_count !== 4 ||
-                w_handshake_count !== 4 ||
+                aw_handshake_count !== 5 ||
+                w_handshake_count !== 5 ||
                 ar_handshake_count !== 7 ||
-                b_handshake_count !== 4 ||
+                b_handshake_count !== 5 ||
                 r_handshake_count !== 7 ||
                 dmem[0] !== 32'd15 ||
                 dmem[1] !== 32'h000aff55 ||
