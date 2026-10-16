@@ -1,33 +1,33 @@
 # TitoRV correctness smoke test
 
 This is a standalone directed simulation test for the RTL currently under
-\`tapeout_project/riscv_core.v\`. It does not replace the existing UVM/AXI tests
+`tapeout_project/riscv_core.v`. It does not replace the existing UVM/AXI tests
 and does not claim full RISC-V ISA compliance.
 
 ## What it checks
 
-- \`ADDI\`, \`ADD\`, \`SUB\`, and \`LUI\` results
-- \`x0\` remains zero
+- `ADDI`, `ADD`, `SUB`, and `LUI` results
+- `x0` remains zero
 - A word store and a word load through the core's AXI-Lite master
 - Read-after-write consistency for the tested memory word
 - A completion signature, automatic pass/fail checks, and a timeout
 
-The current \`tapeout_project/riscv_core.v\` decoder is only a subset of RV32I.
+The current `tapeout_project/riscv_core.v` decoder is only a subset of RV32I.
 It does not currently implement the full base ISA, CSRs, or architectural
 exception/interrupt handling. The test deliberately limits itself to the
 instructions the RTL handles.
 
 ## Run in Vivado/XSim
 
-1. Add \`tapeout_project/riscv_core.v\` and \`tapeout_project/riscv_correctness_tb.sv\`
+1. Add `tapeout_project/riscv_core.v` and `tapeout_project/riscv_correctness_tb.sv`
    to a simulation sourceset.
-2. Set \`tb_riscv_correctness\` as the simulation top.
+2. Set `tb_riscv_correctness` as the simulation top.
 3. Run behavioral simulation.
-4. A successful run ends with \`PASS: directed instruction, register, load/store,
-   and x0 checks passed.\` A timeout or mismatch calls \`$fatal\`.
+4. A successful run ends with `PASS: directed instruction, register, load/store,
+   and x0 checks passed.` A timeout or mismatch calls `$fatal`.
 
 The testbench has its own instruction ROM and AXI-Lite memory model. Do not add
-\`tapeout_project/instr_mem.v\`, \`design.sv\`, or the existing UVM \`testbench.sv\`
+`tapeout_project/instr_mem.v`, `design.sv`, or the existing UVM `testbench.sv`
 to this standalone simulation unless you intentionally adapt the testbench.
 
 ## Next steps toward architectural certification
