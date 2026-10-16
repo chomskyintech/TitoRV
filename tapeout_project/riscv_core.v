@@ -128,6 +128,14 @@ wire [4:0] rs1 = ex_insn[19:15];
 wire [4:0] rs2 = ex_insn[24:20];
 wire [4:0] rd  = ex_insn[11:7];
 
+// Accept only encodings implemented by this core. Unsupported funct fields
+// must not alias ADDI/ADD/SUB or launch an unintended memory transaction.
+wire valid_addi = (opcode == OP_ARITHI) && (funct3 == 3'b000);
+wire valid_arithr = (opcode == OP_ARITHR) && (funct3 == 3'b000) &&
+                    ((funct7 == 7'b0000000) || (funct7 == 7'b0100000));
+wire valid_lw = (opcode == OP_LOAD) && (funct3 == 3'b010);
+wire valid_sw = (opcode == OP_STORE) && (funct3 == 3'b010);
+
 // ============================================================
 // Register Reads
 // ============================================================
@@ -197,50 +205,33 @@ begin
         // ADDI
         // --------------------------------------------------------
         OP_ARITHI:
-        begin
-            case(funct3)
-
-                3'b000:
-                    alu_out = rs1_data + imm_i;
-
-                default:
-                    alu_out = rs1_data + imm_i;
-
-            endcase
-        end
+            if(valid_addi)
+                alu_out = rs1_data + imm_i;
 
         // --------------------------------------------------------
         // ADD / SUB
         // --------------------------------------------------------
         OP_ARITHR:
         begin
-            case(funct3)
-
-                3'b000:
-                begin
-                    if(funct7 == 7'b0100000)
-                        alu_out = rs1_data - rs2_data;
-                    else
-                        alu_out = rs1_data + rs2_data;
-                end
-
-                default:
+            if(valid_arithr) begin
+                if(funct7 == 7'b0100000)
+                    alu_out = rs1_data - rs2_data;
+                else
                     alu_out = rs1_data + rs2_data;
-
-            endcase
+            end
         end
 
         // --------------------------------------------------------
         // Load address
         // --------------------------------------------------------
         OP_LOAD:
-            alu_out = rs1_data + imm_i;
+            if(valid_lw) alu_out = rs1_data + imm_i;
 
         // --------------------------------------------------------
         // Store address
         // --------------------------------------------------------
         OP_STORE:
-            alu_out = rs1_data + imm_s;
+            if(valid_sw) alu_out = rs1_data + imm_s;
 
         // --------------------------------------------------------
         // LUI
@@ -555,9 +546,10 @@ begin
 
             OP_ARITHI:
             begin
-                if(rd != 0)
+                if(valid_addi && rd != 0) begin
                     rf[rd] <= alu_out;
-                     $display("EXEC ADDI: rd=x%0d result=%h", rd, alu_out);
+                    $display("EXEC ADDI: rd=x%0d result=%h", rd, alu_out);
+                end
             end
 
             // =================================================
@@ -566,9 +558,10 @@ begin
 
             OP_ARITHR:
             begin
-                if(rd != 0)
+                if(valid_arithr && rd != 0) begin
                     rf[rd] <= alu_out;
-              $display("EXEC ARITH: rd=x%0d result=%h", rd, alu_out);
+                    $display("EXEC ARITH: rd=x%0d result=%h", rd, alu_out);
+                end
             end
 
             // =================================================
@@ -618,7 +611,7 @@ begin
 
             OP_LOAD:
             begin
-
+                if(valid_lw) begin
                 M_AXI_ARADDR  <= alu_out;
                 M_AXI_ARVALID <= 1'b1;
 
@@ -631,7 +624,7 @@ begin
                     alu_out,
                     rd
                 );
-
+                end
             end
 
             // =================================================
@@ -640,7 +633,7 @@ begin
 
             OP_STORE:
             begin
-
+                if(valid_sw) begin
                 M_AXI_AWADDR <= alu_out;
 
                 M_AXI_WDATA  <= rs2_data;
@@ -661,7 +654,7 @@ begin
                     alu_out,
                     rs2_data
                 );
-
+                end
             end
 
             // =================================================
