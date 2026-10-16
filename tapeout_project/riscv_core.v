@@ -251,7 +251,7 @@ wire illegal_instruction =
     !((opcode == OP_LUI) || (opcode == OP_JAL) || (opcode == OP_JALR) ||
       (opcode == OP_AUIPC) || (opcode == OP_BRANCH) || (opcode == OP_LOAD) ||
       (opcode == OP_STORE) || (opcode == OP_ARITHI) || (opcode == OP_ARITHR) ||
-      (opcode == 7'b0001111)) ||
+      (opcode == 7'b0001111) || (opcode == OP_SYSTEM)) ||
     ((opcode == OP_SYSTEM) && !system_exception && !csr_instruction_valid);
 
 // ============================================================
