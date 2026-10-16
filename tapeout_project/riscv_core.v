@@ -188,6 +188,8 @@ wire valid_jalr = (opcode == OP_JALR) && (funct3 == 3'b000);
 // Detect malformed encodings in implemented instruction classes. FENCE and
 // SYSTEM are legal RV32I opcode classes but are not implemented by this core;
 // they are intentionally not mislabeled as illegal by this decoder.
+wire system_exception = (opcode == 7'b1110011) &&
+    ((ex_insn == 32'h00000073) || (ex_insn == 32'h00100073));
 wire illegal_instruction =
     ((opcode == OP_ARITHI) && !valid_addi) ||
     ((opcode == OP_ARITHR) && !valid_arithr) ||
@@ -611,11 +613,16 @@ begin
     // EXECUTE
     // ---------------------------------------------------------
 
-    if(ex_valid && illegal_instruction)
+    if(ex_valid && (illegal_instruction || system_exception))
     begin
         trap_valid <= 1'b1;
         trap_pc <= ex_pc;
-        trap_cause <= 32'd2;
+        if (ex_insn == 32'h00000073)
+            trap_cause <= 32'd11; // ECALL from machine mode
+        else if (ex_insn == 32'h00100073)
+            trap_cause <= 32'd3;  // breakpoint
+        else
+            trap_cause <= 32'd2;  // illegal instruction
         pc <= ex_pc;
         instr_addr <= ex_pc;
         if_pc <= ex_pc;
@@ -623,7 +630,9 @@ begin
         if_insn <= 32'h00000013;
         ex_insn <= 32'h00000013;
         ex_valid <= 1'b0;
-        $display("ILLEGAL INSTRUCTION: pc=%h insn=%h cause=2", ex_pc, ex_insn);
+        $display("TRAP: pc=%h insn=%h cause=%0d", ex_pc, ex_insn,
+                 (ex_insn == 32'h00000073) ? 32'd11 :
+                 ((ex_insn == 32'h00100073) ? 32'd3 : 32'd2));
     end
     else if(ex_valid)
     begin
