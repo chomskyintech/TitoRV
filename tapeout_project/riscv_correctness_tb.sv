@@ -115,7 +115,7 @@ module tb_riscv_correctness;
         end
 
         // ADDI, ADD, SUB, LUI, SW, LW, and JAL self-loop.
-        rom[0]  = 32'h00500093; // addi x1, x0, 5
+        rom[0]  = 32'h00508093; // addi x1, x1, 5; catches duplicate first-instruction execution
         rom[1]  = 32'h00A00113; // addi x2, x0, 10
         rom[2]  = 32'h002081B3; // add  x3, x1, x2 => 15
         rom[3]  = 32'h40110233; // sub  x4, x2, x1 => 5
