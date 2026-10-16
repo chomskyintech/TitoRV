@@ -20,10 +20,10 @@ jobs:
           sudo apt-get install -y iverilog
       - name: Compile system wrapper
         run: iverilog -g2012 -Wall -I tapeout_project -s riscv_system_top -o /tmp/titorv-system tapeout_project/design.sv
-      - name: Compile and run directed regression across illegal encodings
+      - name: Compile and run directed regression across illegal encodings and system exceptions
         run: |
           set -e
-          for case_id in 0 1 2 3 4 5 6; do
+          for case_id in 0 1 2 3 4 5 6 7 8; do
             echo "=== Illegal instruction regression case ${case_id} ==="
             iverilog -g2012 -Wall -s tb_riscv_correctness \
               -Ptb_riscv_correctness.ILLEGAL_CASE=${case_id} \
