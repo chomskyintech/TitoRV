@@ -14,8 +14,10 @@ and does not claim full RISC-V ISA compliance.
 
 The current `tapeout_project/riscv_core.v` decoder is only a subset of RV32I.
 It does not currently implement the full base ISA, CSRs, or architectural
-exception/interrupt handling. The test deliberately limits itself to the
-instructions the RTL handles.
+exception/interrupt handling. Code inspection also suggests that `ex_valid` is
+not cleared after a load/store despite the comment saying it is; the testbench
+flags a repeated store as a failure. This is a regression test intended to expose
+that issue, not a test that has already passed on the current RTL.
 
 ## Run in Vivado/XSim
 
