@@ -50,7 +50,19 @@ module tb_riscv_correctness #(
                 3: illegal_encoding = 32'h00203023; // invalid STORE funct3
                 4: illegal_encoding = 32'h0020a063; // reserved BRANCH funct3
                 5: illegal_encoding = 32'h00051a67; // invalid JALR funct3
-                default: illegal_encoding = 32'hffffffff; // reserved opcode
+                6: illegal_encoding = 32'hffffffff; // reserved opcode
+                7: illegal_encoding = 32'h00000073; // ECALL
+                default: illegal_encoding = 32'h00100073; // EBREAK
+            endcase
+        end
+    endfunction
+
+    function [31:0] expected_trap_cause(input integer test_case);
+        begin
+            case (test_case)
+                7: expected_trap_cause = 32'd11; // ECALL from machine mode
+                8: expected_trap_cause = 32'd3;  // EBREAK
+                default: expected_trap_cause = 32'd2; // illegal instruction
             endcase
         end
     endfunction
@@ -317,7 +329,7 @@ module tb_riscv_correctness #(
         rom[90] = 32'h00a05c83; // lhu  x25, 10(x0) => 10
         // Finish the ordinary regression, then execute a reserved R-type
         // encoding. The core must report cause 2 and freeze at the fault PC.
-        rom[91] = 32'h00000013; // NOP
+        rom[91] = 32'h0000000f; // FENCE: legal no-op in this in-order, single-outstanding core
         rom[92] = 32'h00000013; // NOP
         rom[93] = 32'h00000013; // NOP
         rom[94] = 32'h00000013; // NOP
@@ -379,7 +391,7 @@ module tb_riscv_correctness #(
                 dut.rf[0] !== 32'd0 ||
                 trap_valid !== 1'b1 ||
                 trap_pc !== 32'd384 ||
-                trap_cause !== 32'd2 ||
+                trap_cause !== expected_trap_cause(ILLEGAL_CASE) ||
                 aw_handshake_count !== 7 ||
                 w_handshake_count !== 7 ||
                 ar_handshake_count !== 11 ||
@@ -392,7 +404,7 @@ module tb_riscv_correctness #(
                 $display("FAIL: one or more architectural state checks mismatched.");
                 $fatal(1);
             end else begin
-                $display("PASS: arithmetic, branch boundaries, memory lanes, AXI, x0, and illegal-instruction case %0d passed.", ILLEGAL_CASE);
+                $display("PASS: arithmetic, branch boundaries, memory lanes, FENCE, AXI, and exception case %0d passed.", ILLEGAL_CASE);
                 $finish;
             end
         end
