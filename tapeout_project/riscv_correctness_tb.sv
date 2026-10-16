@@ -214,8 +214,22 @@ module tb_riscv_correctness;
         rom[18] = 32'h00900813; // addi x16, x0, 9
         rom[19] = 32'h00504893; // xori x17, x0, 5
         rom[20] = 32'h0020F933; // and x18, x1, x2
-        rom[21] = 32'h00942023; // sw x9, 0(x8): completion signature
-        rom[22] = 32'h0000006F; // jal x0, 0
+        rom[21] = 32'h00000397; // auipc x7, 0
+        rom[22] = 32'h0080e993; // ori x19, x1, 8
+        rom[23] = 32'h00617a13; // andi x20, x2, 6
+        rom[24] = 32'h0060aa93; // slti x21, x1, 6
+        rom[25] = 32'h0060bb13; // sltiu x22, x1, 6
+        rom[26] = 32'h00209b93; // slli x23, x1, 2
+        rom[27] = 32'h00115c13; // srli x24, x2, 1
+        rom[28] = 32'h40115c93; // srai x25, x2, 1
+        rom[29] = 32'h0020cd33; // xor x26, x1, x2
+        rom[30] = 32'h0020edb3; // or x27, x1, x2
+        rom[31] = 32'h0020ae33; // slt x28, x1, x2
+        rom[32] = 32'h0020beb3; // sltu x29, x1, x2
+        rom[33] = 32'h00a09f33; // sll x30, x1, x10
+        rom[34] = 32'h00a15fb3; // srl x31, x2, x10
+        rom[35] = 32'h00942023; // sw x9, 0(x8): completion signature
+        rom[36] = 32'h0000006f; // jal x0, 0
 
         repeat (5) @(posedge clk);
         resetb = 1'b1;
@@ -250,6 +264,20 @@ module tb_riscv_correctness;
                 dut.rf[16] !== 32'd9 ||
                 dut.rf[17] !== 32'd5 ||
                 dut.rf[18] !== 32'd0 ||
+                dut.rf[7] !== 32'd84 ||
+                dut.rf[19] !== 32'd13 ||
+                dut.rf[20] !== 32'd2 ||
+                dut.rf[21] !== 32'd1 ||
+                dut.rf[22] !== 32'd1 ||
+                dut.rf[23] !== 32'd20 ||
+                dut.rf[24] !== 32'd5 ||
+                dut.rf[25] !== 32'd5 ||
+                dut.rf[26] !== 32'd15 ||
+                dut.rf[27] !== 32'd15 ||
+                dut.rf[28] !== 32'd1 ||
+                dut.rf[29] !== 32'd1 ||
+                dut.rf[30] !== 32'd10 ||
+                dut.rf[31] !== 32'd5 ||
                 dut.rf[0] !== 32'd0 ||
                 aw_handshake_count !== 2 ||
                 w_handshake_count !== 2 ||
