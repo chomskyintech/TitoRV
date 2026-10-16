@@ -18,6 +18,8 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y iverilog
+      - name: Compile system wrapper
+        run: iverilog -g2012 -Wall -I tapeout_project -s riscv_system_top -o /tmp/titorv-system tapeout_project/design.sv
       - name: Compile and run directed regression across illegal encodings
         run: |
           set -e
