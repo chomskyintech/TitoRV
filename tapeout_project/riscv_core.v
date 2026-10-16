@@ -167,9 +167,9 @@ wire valid_addi = (opcode == OP_ARITHI) &&
      ((funct3 == 3'b101) &&
       ((funct7 == 7'b0000000) || (funct7 == 7'b0100000))));
 wire valid_arithr = (opcode == OP_ARITHR) &&
-    (((funct3 == 3'b000) && ((funct7 == 7'b0000000) || (funct7 == 7'b0100000))) ||
-     ((funct3 != 3'b000) && (funct7 == 7'b0000000)) ||
-     ((funct3 == 3'b101) && (funct7 == 7'b0100000)));
+    (((funct7 == 7'b0000000)) ||
+     ((funct7 == 7'b0100000) &&
+      ((funct3 == 3'b000) || (funct3 == 3'b101))));
 wire valid_load = (opcode == OP_LOAD) &&
     ((funct3 == 3'b000) || (funct3 == 3'b001) || (funct3 == 3'b010) ||
      (funct3 == 3'b100) || (funct3 == 3'b101));
