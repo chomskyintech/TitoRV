@@ -265,12 +265,13 @@ module tb_riscv_correctness;
         rom[66] = 32'h00117663; // bgeu x2, x1, +12
         rom[67] = 32'h0840006f; // failure path: jal to rom[100]
         rom[68] = 32'h00000013; // NOP
-        rom[69] = 32'h00000013; // branch-test padding
-        rom[70] = 32'h00000013; // branch-test padding
-        rom[71] = 32'h00000013; // branch-test padding
-        rom[72] = 32'h00000013; // branch-test padding
-        rom[73] = 32'h00000013; // branch-test padding
-        rom[74] = 32'h00000013; // branch-test padding
+        // Signed arithmetic edge cases after the branch predicates.
+        rom[69] = 32'h80000613; // addi x12, x0, -2048: minimum 12-bit immediate
+        rom[70] = 32'hfff00693; // addi x13, x0, -1: sign extension
+        rom[71] = 32'h0006a733; // slt  x14, x13, x0 => 1 (-1 < 0 signed)
+        rom[72] = 32'h0006b7b3; // sltu x15, x13, x0 => 0 (0xffffffff < 0 unsigned is false)
+        rom[73] = 32'h4016d813; // srai x16, x13, 1 => 0xffffffff
+        rom[74] = 32'h0016d893; // srli x17, x13, 1 => 0x7fffffff
         rom[75] = 32'h00942023; // sw x9, 0(x8): completion signature
         rom[76] = 32'h0000006f; // terminal loop
         rom[100] = 32'h0000006f; // failure loop (watchdog must fire)
@@ -302,12 +303,12 @@ module tb_riscv_correctness;
                 dut.rf[9] !== 32'd85 ||
                 dut.rf[10] !== 32'd200 ||
                 dut.rf[11] !== 32'd1 ||
-                dut.rf[12] !== 32'd85 ||
-                dut.rf[13] !== 32'd85 ||
-                dut.rf[14] !== 32'd68 ||
-                dut.rf[15] !== 32'hffffffff ||
+                dut.rf[12] !== 32'hfffff800 ||
+                dut.rf[13] !== 32'hffffffff ||
+                dut.rf[14] !== 32'd1 ||
+                dut.rf[15] !== 32'd0 ||
                 dut.rf[16] !== 32'hffffffff ||
-                dut.rf[17] !== 32'd255 ||
+                dut.rf[17] !== 32'h7fffffff ||
                 dut.rf[18] !== 32'd10 ||
                 dut.rf[7] !== 32'd84 ||
                 dut.rf[19] !== 32'd10 ||
