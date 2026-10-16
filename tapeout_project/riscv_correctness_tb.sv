@@ -1,5 +1,4 @@
-// Directed correctness smoke test for the current tapeout_project/riscv_core.v.
-// This tests only the instruction subset implemented by that RTL revision.
+// Directed RV32I instruction and AXI-Lite transaction tests for riscv_core.
 `timescale 1ns/1ps
 `default_nettype none
 
@@ -228,8 +227,25 @@ module tb_riscv_correctness;
         rom[32] = 32'h0020beb3; // sltu x29, x1, x2
         rom[33] = 32'h00a09f33; // sll x30, x1, x10
         rom[34] = 32'h00a15fb3; // srl x31, x2, x10
-        rom[35] = 32'h00942023; // sw x9, 0(x8): completion signature
-        rom[36] = 32'h0000006f; // jal x0, 0
+        // Byte and halfword memory access tests at addresses 4..7.
+        rom[35] = 32'h00900223; // sb   x9, 4(x0): byte 0x55
+        rom[36] = 32'h00404603; // lbu  x12, 4(x0) => 85
+        rom[37] = 32'h00400683; // lb   x13, 4(x0) => 85
+        rom[38] = 32'hfff00793; // addi x15, x0, -1
+        rom[39] = 32'h00f002a3; // sb   x15, 5(x0): byte 0xff
+        rom[40] = 32'h00500803; // lb   x16, 5(x0) => -1
+        rom[41] = 32'h00504883; // lbu  x17, 5(x0) => 255
+        rom[42] = 32'h00201323; // sh   x2, 6(x0): halfword 10
+        rom[43] = 32'h00601903; // lh   x18, 6(x0) => 10
+        rom[44] = 32'h00605983; // lhu  x19, 6(x0) => 10
+        // JALR must clear bit 0, write PC+4 to rd, and flush fall-through.
+        rom[45] = 32'h00000b13; // addi x22, x0, 0 (clear sentinel)
+        rom[46] = 32'h0c000513; // addi x10, x0, 192 (target byte address)
+        rom[47] = 32'h00050a67; // jalr x20, 0(x10), target rom[48]
+        rom[48] = 32'h06300b13; // addi x22, x0, 99 (must be flushed)
+        rom[49] = 32'h02a00a93; // target: addi x21, x0, 42
+        rom[50] = 32'h00942023; // sw x9, 0(x8): completion signature
+        rom[51] = 32'h0000006f; // jal x0, 0
 
         repeat (5) @(posedge clk);
         resetb = 1'b1;
@@ -238,13 +254,14 @@ module tb_riscv_correctness;
     // Signature is written to byte address 1020 (word index 255).
     always @(posedge clk) begin
         if (resetb && !finished && dmem[255] == 32'h00000055 &&
-            b_handshake_count == 2 && r_handshake_count == 1) begin
+            b_handshake_count == 4 && r_handshake_count == 7) begin
             finished = 1'b1;
             #1;
             $display("TitoRV directed correctness test results:");
             $display("x1=%08h x2=%08h x3=%08h x4=%08h", dut.rf[1], dut.rf[2], dut.rf[3], dut.rf[4]);
             $display("x5=%08h x6=%08h x8=%08h x9=%08h", dut.rf[5], dut.rf[6], dut.rf[8], dut.rf[9]);
             $display("mem[0]=%08h signature=%08h", dmem[0], dmem[255]);
+            $display("byte/halfword word=%08h", dmem[1]);
             $display("AXI handshakes AW=%0d W=%0d B=%0d AR=%0d R=%0d", aw_handshake_count, w_handshake_count, b_handshake_count, ar_handshake_count, r_handshake_count);
 
             if (dut.rf[1] !== 32'd5 ||
@@ -255,20 +272,20 @@ module tb_riscv_correctness;
                 dut.rf[6] !== 32'h12345000 ||
                 dut.rf[8] !== 32'd1020 ||
                 dut.rf[9] !== 32'd85 ||
-                dut.rf[10] !== 32'd1 ||
+                dut.rf[10] !== 32'd192 ||
                 dut.rf[11] !== 32'd1 ||
-                dut.rf[12] !== 32'd7 ||
-                dut.rf[13] !== 32'd8 ||
+                dut.rf[12] !== 32'd85 ||
+                dut.rf[13] !== 32'd85 ||
                 dut.rf[14] !== 32'd68 ||
-                dut.rf[15] !== 32'd0 ||
-                dut.rf[16] !== 32'd9 ||
-                dut.rf[17] !== 32'd5 ||
-                dut.rf[18] !== 32'd0 ||
+                dut.rf[15] !== 32'hffffffff ||
+                dut.rf[16] !== 32'hffffffff ||
+                dut.rf[17] !== 32'd255 ||
+                dut.rf[18] !== 32'd10 ||
                 dut.rf[7] !== 32'd84 ||
-                dut.rf[19] !== 32'd13 ||
-                dut.rf[20] !== 32'd2 ||
-                dut.rf[21] !== 32'd1 ||
-                dut.rf[22] !== 32'd1 ||
+                dut.rf[19] !== 32'd10 ||
+                dut.rf[20] !== 32'd192 ||
+                dut.rf[21] !== 32'd42 ||
+                dut.rf[22] !== 32'd0 ||
                 dut.rf[23] !== 32'd20 ||
                 dut.rf[24] !== 32'd5 ||
                 dut.rf[25] !== 32'd5 ||
@@ -279,17 +296,18 @@ module tb_riscv_correctness;
                 dut.rf[30] !== 32'd10 ||
                 dut.rf[31] !== 32'd5 ||
                 dut.rf[0] !== 32'd0 ||
-                aw_handshake_count !== 2 ||
-                w_handshake_count !== 2 ||
-                ar_handshake_count !== 1 ||
-                b_handshake_count !== 2 ||
-                r_handshake_count !== 1 ||
+                aw_handshake_count !== 4 ||
+                w_handshake_count !== 4 ||
+                ar_handshake_count !== 7 ||
+                b_handshake_count !== 4 ||
+                r_handshake_count !== 7 ||
                 dmem[0] !== 32'd15 ||
+                dmem[1] !== 32'h000aff55 ||
                 dmem[255] !== 32'd85) begin
                 $display("FAIL: one or more architectural state checks mismatched.");
                 $fatal(1);
             end else begin
-                $display("PASS: directed instruction, register, load/store, and x0 checks passed.");
+                $display("PASS: arithmetic, control flow, byte/halfword load-store, AXI, and x0 checks passed.");
                 $finish;
             end
         end
