@@ -638,7 +638,7 @@ begin
 
             OP_JAL, OP_JALR:
             begin
-                if(rd != 0)
+                if(rd != 0 && (opcode == OP_JAL || (opcode == OP_JALR && funct3 == 3'b000)))
                     rf[rd] <= ex_pc + 32'd4;
 
                 // Redirect fetch and flush both younger pipeline slots.
