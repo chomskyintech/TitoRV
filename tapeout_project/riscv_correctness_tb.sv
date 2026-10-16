@@ -245,8 +245,35 @@ module tb_riscv_correctness;
         rom[48] = 32'h06300b13; // addi x22, x0, 99 (must be flushed)
         rom[49] = 32'h00000013; // NOP at link address
         rom[50] = 32'h02a00a93; // target: addi x21, x0, 42
-        rom[51] = 32'h00942023; // sw x9, 0(x8): completion signature
-        rom[52] = 32'h0000006f; // jal x0, 0
+        // Exercise all six RV32I branch predicates with taken cases.
+        // A failed predicate jumps to rom[100], preventing the signature.
+        rom[51] = 32'h00108663; // beq  x1, x1, +12
+        rom[52] = 32'h0c00006f; // failure path: jal to rom[100]
+        rom[53] = 32'h00000013; // NOP
+        rom[54] = 32'h00111663; // bne  x2, x1, +12
+        rom[55] = 32'h0b00006f; // failure path: jal to rom[100]
+        rom[56] = 32'h00000013; // NOP
+        rom[57] = 32'h0020c663; // blt  x1, x2, +12
+        rom[58] = 32'h0a00006f; // failure path: jal to rom[100]
+        rom[59] = 32'h00000013; // NOP
+        rom[60] = 32'h00115663; // bge  x2, x1, +12
+        rom[61] = 32'h0900006f; // failure path: jal to rom[100]
+        rom[62] = 32'h00000013; // NOP
+        rom[63] = 32'h0020e663; // bltu x1, x2, +12
+        rom[64] = 32'h0800006f; // failure path: jal to rom[100]
+        rom[65] = 32'h00000013; // NOP
+        rom[66] = 32'h00117663; // bgeu x2, x1, +12
+        rom[67] = 32'h0700006f; // failure path: jal to rom[100]
+        rom[68] = 32'h00000013; // NOP
+        rom[69] = 32'h00000013; // branch-test padding
+        rom[70] = 32'h00000013; // branch-test padding
+        rom[71] = 32'h00000013; // branch-test padding
+        rom[72] = 32'h00000013; // branch-test padding
+        rom[73] = 32'h00000013; // branch-test padding
+        rom[74] = 32'h00000013; // branch-test padding
+        rom[75] = 32'h00942023; // sw x9, 0(x8): completion signature
+        rom[76] = 32'h0000006f; // terminal loop
+        rom[100] = 32'h0000006f; // failure loop (watchdog must fire)
 
         repeat (5) @(posedge clk);
         resetb = 1'b1;
