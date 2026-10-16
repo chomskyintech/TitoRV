@@ -28,6 +28,11 @@ module riscv_system_top(
     input wire clk,
     input wire resetb,
 
+    // Core exception diagnostics.
+    output wire        trap_valid,
+    output wire [31:0] trap_pc,
+    output wire [31:0] trap_cause,
+
     // AXI Write Address
     output wire [31:0] M_AXI_AWADDR,
     output wire        M_AXI_AWVALID,
@@ -78,6 +83,9 @@ riscv_core cpu
 
     .instr_addr(instr_addr),
     .instr_rdata(instr_rdata),
+    .trap_valid(trap_valid),
+    .trap_pc(trap_pc),
+    .trap_cause(trap_cause),
 
     //---------------- AXI Write Address ----------
 
