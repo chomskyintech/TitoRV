@@ -2,7 +2,9 @@
 `timescale 1ns/1ps
 `default_nettype none
 
-module tb_riscv_correctness;
+module tb_riscv_correctness #(
+    parameter integer ILLEGAL_CASE = 0
+);
     reg clk = 1'b0;
     reg resetb = 1'b0;
     always #5 clk = ~clk;
@@ -38,6 +40,20 @@ module tb_riscv_correctness;
     integer i;
     integer lane;
     reg finished = 1'b0;
+
+    function [31:0] illegal_encoding(input integer test_case);
+        begin
+            case (test_case)
+                0: illegal_encoding = 32'h02208d33; // invalid R-type funct7
+                1: illegal_encoding = 32'h02209e13; // invalid SLLI upper immediate bits
+                2: illegal_encoding = 32'h00003d83; // invalid LOAD funct3
+                3: illegal_encoding = 32'h00203023; // invalid STORE funct3
+                4: illegal_encoding = 32'h0020a063; // reserved BRANCH funct3
+                5: illegal_encoding = 32'h00051a67; // invalid JALR funct3
+                default: illegal_encoding = 32'hffffffff; // reserved opcode
+            endcase
+        end
+    endfunction
 
     // Deterministic, independent backpressure on each address/data channel.
     integer cycle_count = 0;
@@ -306,7 +322,7 @@ module tb_riscv_correctness;
         rom[93] = 32'h00000013; // NOP
         rom[94] = 32'h00000013; // NOP
         rom[95] = 32'h00942023; // sw x9, 0(x8): completion signature
-        rom[96] = 32'h02208d33; // invalid R-type funct7=0000001 => illegal instruction
+        rom[96] = illegal_encoding(ILLEGAL_CASE); // selected malformed instruction => illegal trap
         rom[100] = 32'h0000006f; // failure loop (watchdog must fire)
 
         repeat (5) @(posedge clk);
@@ -376,7 +392,7 @@ module tb_riscv_correctness;
                 $display("FAIL: one or more architectural state checks mismatched.");
                 $fatal(1);
             end else begin
-                $display("PASS: arithmetic, branch boundaries, memory lanes, AXI, x0, and illegal-instruction trap checks passed.");
+                $display("PASS: arithmetic, branch boundaries, memory lanes, AXI, x0, and illegal-instruction case %0d passed.", ILLEGAL_CASE);
                 $finish;
             end
         end
