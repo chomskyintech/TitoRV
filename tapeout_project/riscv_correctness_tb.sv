@@ -114,7 +114,7 @@ module tb_riscv_correctness;
             dmem[i] = 32'd0;
         end
 
-        // ADDI, ADD, SUB, LUI, SW, LW, and JAL self-loop.
+        // Arithmetic, memory, taken/untaken BEQ, JAL, and a terminal loop.
         rom[0]  = 32'h00508093; // addi x1, x1, 5; catches duplicate first-instruction execution
         rom[1]  = 32'h00A00113; // addi x2, x0, 10
         rom[2]  = 32'h002081B3; // add  x3, x1, x2 => 15
@@ -124,8 +124,18 @@ module tb_riscv_correctness;
         rom[6]  = 32'h00002283; // lw   x5, 0(x0) => 15
         rom[7]  = 32'h3FC00413; // addi x8, x0, 1020
         rom[8]  = 32'h05500493; // addi x9, x0, 85 (0x55)
-        rom[9]  = 32'h00942023; // sw   x9, 0(x8): completion signature
-        rom[10] = 32'h0000006F; // jal  x0, 0
+        rom[9]  = 32'h00100513; // addi x10, x0, 1
+        rom[10] = 32'h00100593; // addi x11, x0, 1
+        rom[11] = 32'h00B50463; // beq x10, x11, +8 (taken; skip rom[12])
+        rom[12] = 32'h06300613; // addi x12, x0, 99 (must be flushed)
+        rom[13] = 32'h00700613; // addi x12, x0, 7
+        rom[14] = 32'h00050463; // beq x10, x0, +8 (untaken)
+        rom[15] = 32'h00800693; // addi x13, x0, 8
+        rom[16] = 32'h0080076F; // jal x14, +8 (skip rom[17], link=PC+4)
+        rom[17] = 32'h06300793; // addi x15, x0, 99 (must be flushed)
+        rom[18] = 32'h00900813; // addi x16, x0, 9
+        rom[19] = 32'h00942023; // sw x9, 0(x8): completion signature
+        rom[20] = 32'h0000006F; // jal x0, 0
 
         repeat (5) @(posedge clk);
         resetb = 1'b1;
@@ -149,6 +159,13 @@ module tb_riscv_correctness;
                 dut.rf[6] !== 32'h12345000 ||
                 dut.rf[8] !== 32'd1020 ||
                 dut.rf[9] !== 32'd85 ||
+                dut.rf[10] !== 32'd1 ||
+                dut.rf[11] !== 32'd1 ||
+                dut.rf[12] !== 32'd7 ||
+                dut.rf[13] !== 32'd8 ||
+                dut.rf[14] !== 32'd68 ||
+                dut.rf[15] !== 32'd0 ||
+                dut.rf[16] !== 32'd9 ||
                 dut.rf[0] !== 32'd0 ||
                 dmem[0] !== 32'd15 ||
                 dmem[255] !== 32'd85) begin
