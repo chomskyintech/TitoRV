@@ -272,8 +272,21 @@ module tb_riscv_correctness;
         rom[72] = 32'h0006b7b3; // sltu x15, x13, x0 => 0 (0xffffffff < 0 unsigned is false)
         rom[73] = 32'h4016d813; // srai x16, x13, 1 => 0xffffffff
         rom[74] = 32'h0016d893; // srli x17, x13, 1 => 0x7fffffff
-        rom[75] = 32'h00942023; // sw x9, 0(x8): completion signature
-        rom[76] = 32'h0000006f; // terminal loop
+        // Signed/unsigned branch edge cases around negative operands.
+        // Expected-taken branches skip the following failure jump. For expected-
+        // not-taken branches, a JAL skips the failure jump only on the fall-through path.
+        rom[75] = 32'h00064463; // blt  x12, x0, +8: -2048 < 0 (taken)
+        rom[76] = 32'h0600006f; // failure path: jal to rom[100]
+        rom[77] = 32'h00065463; // bge  x12, x0, +8: -2048 >= 0 (not taken)
+        rom[78] = 32'h0080006f; // jal +8 to continue at rom[80]
+        rom[79] = 32'h0540006f; // failure path: jal to rom[100]
+        rom[80] = 32'h0006e463; // bltu x13, x0, +8: 0xffffffff < 0 unsigned (not taken)
+        rom[81] = 32'h0080006f; // jal +8 to continue at rom[83]
+        rom[82] = 32'h0480006f; // failure path: jal to rom[100]
+        rom[83] = 32'h0006f463; // bgeu x13, x0, +8: 0xffffffff >= 0 unsigned (taken)
+        rom[84] = 32'h0400006f; // failure path: jal to rom[100]
+        rom[85] = 32'h00942023; // sw x9, 0(x8): completion signature
+        rom[86] = 32'h0000006f; // terminal loop
         rom[100] = 32'h0000006f; // failure loop (watchdog must fire)
 
         repeat (5) @(posedge clk);
