@@ -212,8 +212,8 @@ module tb_riscv_correctness;
         rom[16] = 32'h0080076F; // jal x14, +8 (skip rom[17], link=PC+4)
         rom[17] = 32'h06300793; // addi x15, x0, 99 (must be flushed)
         rom[18] = 32'h00900813; // addi x16, x0, 9
-        rom[19] = 32'h00504893; // xori x17, x0, 5: unsupported, must not alias ADDI
-        rom[20] = 32'h0020F933; // unsupported R-type funct3: must not alias ADD
+        rom[19] = 32'h00504893; // xori x17, x0, 5
+        rom[20] = 32'h0020F933; // and x18, x1, x2
         rom[21] = 32'h00942023; // sw x9, 0(x8): completion signature
         rom[22] = 32'h0000006F; // jal x0, 0
 
@@ -248,7 +248,7 @@ module tb_riscv_correctness;
                 dut.rf[14] !== 32'd68 ||
                 dut.rf[15] !== 32'd0 ||
                 dut.rf[16] !== 32'd9 ||
-                dut.rf[17] !== 32'd0 ||
+                dut.rf[17] !== 32'd5 ||
                 dut.rf[18] !== 32'd0 ||
                 dut.rf[0] !== 32'd0 ||
                 aw_handshake_count !== 2 ||
