@@ -111,6 +111,34 @@ reg aw_done;
 
 // Register destination for an outstanding load
 reg [4:0] axi_rd;
+reg [2:0] axi_load_funct3;
+reg [1:0] axi_load_addr_low;
+
+reg [31:0] load_result;
+always @* begin
+    case (axi_load_funct3)
+        3'b000: begin
+            case (axi_load_addr_low)
+                2'd0: load_result = {{24{M_AXI_RDATA[7]}}, M_AXI_RDATA[7:0]};
+                2'd1: load_result = {{24{M_AXI_RDATA[15]}}, M_AXI_RDATA[15:8]};
+                2'd2: load_result = {{24{M_AXI_RDATA[23]}}, M_AXI_RDATA[23:16]};
+                default: load_result = {{24{M_AXI_RDATA[31]}}, M_AXI_RDATA[31:24]};
+            endcase
+        end
+        3'b001: load_result = axi_load_addr_low[1] ? {{16{M_AXI_RDATA[31]}}, M_AXI_RDATA[31:16]} : {{16{M_AXI_RDATA[15]}}, M_AXI_RDATA[15:0]};
+        3'b010: load_result = M_AXI_RDATA;
+        3'b100: begin
+            case (axi_load_addr_low)
+                2'd0: load_result = {24'd0, M_AXI_RDATA[7:0]};
+                2'd1: load_result = {24'd0, M_AXI_RDATA[15:8]};
+                2'd2: load_result = {24'd0, M_AXI_RDATA[23:16]};
+                default: load_result = {24'd0, M_AXI_RDATA[31:24]};
+            endcase
+        end
+        3'b101: load_result = axi_load_addr_low[1] ? {16'd0, M_AXI_RDATA[31:16]} : {16'd0, M_AXI_RDATA[15:0]};
+        default: load_result = M_AXI_RDATA;
+    endcase
+end
 
 // ============================================================
 // Pipeline stall
@@ -142,8 +170,11 @@ wire valid_arithr = (opcode == OP_ARITHR) &&
     (((funct3 == 3'b000) && ((funct7 == 7'b0000000) || (funct7 == 7'b0100000))) ||
      ((funct3 != 3'b000) && (funct7 == 7'b0000000)) ||
      ((funct3 == 3'b101) && (funct7 == 7'b0100000)));
-wire valid_lw = (opcode == OP_LOAD) && (funct3 == 3'b010);
-wire valid_sw = (opcode == OP_STORE) && (funct3 == 3'b010);
+wire valid_load = (opcode == OP_LOAD) &&
+    ((funct3 == 3'b000) || (funct3 == 3'b001) || (funct3 == 3'b010) ||
+     (funct3 == 3'b100) || (funct3 == 3'b101));
+wire valid_store = (opcode == OP_STORE) &&
+    ((funct3 == 3'b000) || (funct3 == 3'b001) || (funct3 == 3'b010));
 
 // ============================================================
 // Register Reads
@@ -309,6 +340,8 @@ begin
 
         axi_state <= AXI_IDLE;
         axi_rd    <= 5'd0;
+        axi_load_funct3 <= 3'b010;
+        axi_load_addr_low <= 2'b00;
         w_done    <= 1'b0;
         aw_done   <= 1'b0;
         
@@ -483,7 +516,7 @@ begin
     if(M_AXI_RVALID && M_AXI_RREADY)
     begin
         if(axi_rd != 0)
-            rf[axi_rd] <= M_AXI_RDATA;
+            rf[axi_rd] <= load_result;
 
         M_AXI_RREADY <= 1'b0;
 
@@ -658,11 +691,13 @@ begin
 
             OP_LOAD:
             begin
-                if(valid_lw) begin
-                M_AXI_ARADDR  <= alu_out;
+                if(valid_load) begin
+                M_AXI_ARADDR  <= {alu_out[31:2], 2'b00};
                 M_AXI_ARVALID <= 1'b1;
 
                 axi_rd    <= rd;
+                axi_load_funct3 <= funct3;
+                axi_load_addr_low <= alu_out[1:0];
                 axi_state <= AXI_RADDR;
 
               
@@ -680,11 +715,14 @@ begin
 
             OP_STORE:
             begin
-                if(valid_sw) begin
-                M_AXI_AWADDR <= alu_out;
-
-                M_AXI_WDATA  <= rs2_data;
-                M_AXI_WSTRB  <= 4'b1111;
+                if(valid_store) begin
+                M_AXI_AWADDR <= {alu_out[31:2], 2'b00};
+                M_AXI_WDATA  <= rs2_data << (alu_out[1:0] * 8);
+                case (funct3)
+                    3'b000: M_AXI_WSTRB <= 4'b0001 << alu_out[1:0];
+                    3'b001: M_AXI_WSTRB <= alu_out[1] ? 4'b1100 : 4'b0011;
+                    default: M_AXI_WSTRB <= 4'b1111;
+                endcase
 
                 M_AXI_AWVALID <= 1'b1;
                 M_AXI_WVALID  <= 1'b1;
