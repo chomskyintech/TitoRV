@@ -95,6 +95,19 @@ module tb_riscv_correctness;
         end
     end
 
+    // The current RTL comment says ex_valid is cleared when a memory
+    // instruction is issued, but the implementation does not clear it.
+    // Catch a replay of the first store instead of waiting for the watchdog.
+    always @(posedge clk) begin
+        if (resetb && !finished &&
+            M_AXI_AWVALID && M_AXI_AWREADY &&
+            M_AXI_WVALID && M_AXI_WREADY &&
+            M_AXI_AWADDR == 32'd0 && dmem[0] == 32'd15) begin
+            $display("FAIL: store at address 0 was reissued; inspect ex_valid/pipeline handling.");
+            $fatal(1);
+        end
+    end
+
     initial begin
         for (i = 0; i < 256; i = i + 1) begin
             rom[i]  = 32'h00000013; // NOP
