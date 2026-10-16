@@ -70,6 +70,7 @@ localparam OP_LOAD   = 7'b0000011;
 localparam OP_STORE  = 7'b0100011;
 localparam OP_ARITHI = 7'b0010011;
 localparam OP_ARITHR = 7'b0110011;
+localparam OP_SYSTEM = 7'b1110011;
 
 // ============================================================
 // Register File
@@ -82,6 +83,20 @@ reg [31:0] rf [31:0];
 // ============================================================
 
 reg [31:0] pc;
+
+// Machine-mode CSR bank. This step adds CSR access semantics; trap entry,
+// mstatus interrupt-stack updates, and MRET are implemented in later steps.
+reg [31:0] csr_mstatus;
+reg [31:0] csr_mtvec;
+reg [31:0] csr_mscratch;
+reg [31:0] csr_mepc;
+reg [31:0] csr_mcause;
+
+localparam [11:0] CSR_MSTATUS  = 12'h300;
+localparam [11:0] CSR_MTVEC    = 12'h305;
+localparam [11:0] CSR_MSCRATCH = 12'h340;
+localparam [11:0] CSR_MEPC     = 12'h341;
+localparam [11:0] CSR_MCAUSE   = 12'h342;
 
 // ============================================================
 // Pipeline Registers
@@ -162,6 +177,42 @@ wire [6:0] funct7 = ex_insn[31:25];
 wire [4:0] rs1 = ex_insn[19:15];
 wire [4:0] rs2 = ex_insn[24:20];
 wire [4:0] rd  = ex_insn[11:7];
+wire [11:0] csr_addr = ex_insn[31:20];
+wire csr_op = (opcode == OP_SYSTEM) && (funct3 != 3'b000);
+wire csr_addr_supported = (csr_addr == CSR_MSTATUS) ||
+                          (csr_addr == CSR_MTVEC) ||
+                          (csr_addr == CSR_MSCRATCH) ||
+                          (csr_addr == CSR_MEPC) ||
+                          (csr_addr == CSR_MCAUSE);
+wire csr_instruction_valid = csr_op && csr_addr_supported &&
+    ((funct3 == 3'b001) || (funct3 == 3'b010) || (funct3 == 3'b011) ||
+     (funct3 == 3'b101) || (funct3 == 3'b110) || (funct3 == 3'b111));
+
+reg [31:0] csr_read_data;
+always @* begin
+    case (csr_addr)
+        CSR_MSTATUS:  csr_read_data = csr_mstatus;
+        CSR_MTVEC:    csr_read_data = csr_mtvec;
+        CSR_MSCRATCH: csr_read_data = csr_mscratch;
+        CSR_MEPC:     csr_read_data = csr_mepc;
+        CSR_MCAUSE:   csr_read_data = csr_mcause;
+        default:      csr_read_data = 32'd0;
+    endcase
+end
+
+wire [31:0] csr_source = (funct3[2]) ? {27'd0, rs1} : rs1_data;
+reg [31:0] csr_write_data;
+always @* begin
+    case (funct3[1:0])
+        2'b01: csr_write_data = csr_source;                 // CSRRW[I]
+        2'b10: csr_write_data = csr_read_data | csr_source; // CSRRS[I]
+        2'b11: csr_write_data = csr_read_data & ~csr_source;// CSRRC[I]
+        default: csr_write_data = csr_read_data;
+    endcase
+end
+wire csr_write_enable = (funct3[1:0] == 2'b01) ||
+    (((funct3[1:0] == 2'b10) || (funct3[1:0] == 2'b11)) &&
+     (rs1 != 5'd0));
 
 // Accept only encodings implemented by this core. Unsupported funct fields
 // must not alias ADDI/ADD/SUB or launch an unintended memory transaction.
@@ -188,7 +239,7 @@ wire valid_jalr = (opcode == OP_JALR) && (funct3 == 3'b000);
 // Detect malformed encodings in implemented instruction classes. FENCE and
 // SYSTEM are legal RV32I opcode classes but are not implemented by this core;
 // they are intentionally not mislabeled as illegal by this decoder.
-wire system_exception = (opcode == 7'b1110011) &&
+wire system_exception = (opcode == OP_SYSTEM) &&
     ((ex_insn == 32'h00000073) || (ex_insn == 32'h00100073));
 wire illegal_instruction =
     ((opcode == OP_ARITHI) && !valid_addi) ||
@@ -200,7 +251,8 @@ wire illegal_instruction =
     !((opcode == OP_LUI) || (opcode == OP_JAL) || (opcode == OP_JALR) ||
       (opcode == OP_AUIPC) || (opcode == OP_BRANCH) || (opcode == OP_LOAD) ||
       (opcode == OP_STORE) || (opcode == OP_ARITHI) || (opcode == OP_ARITHR) ||
-      (opcode == 7'b0001111) || (opcode == 7'b1110011));
+      (opcode == 7'b0001111)) ||
+    ((opcode == OP_SYSTEM) && !system_exception && !csr_instruction_valid);
 
 // ============================================================
 // Register Reads
@@ -366,6 +418,11 @@ begin
         trap_valid <= 1'b0;
         trap_pc <= 32'd0;
         trap_cause <= 32'd0;
+        csr_mstatus <= 32'd0;
+        csr_mtvec <= 32'd0;
+        csr_mscratch <= 32'd0;
+        csr_mepc <= 32'd0;
+        csr_mcause <= 32'd0;
 
         axi_state <= AXI_IDLE;
         axi_rd    <= 5'd0;
@@ -731,6 +788,34 @@ begin
                         ex_pc      <= ex_pc + imm_b;
                         ex_insn    <= 32'h00000013;
                         ex_valid   <= 1'b1;
+                    end
+                end
+            end
+
+            // =================================================
+            // Machine-mode CSR access (CSRRW/CSRRS/CSRRC and immediate forms)
+            // =================================================
+            OP_SYSTEM:
+            begin
+                if (csr_instruction_valid) begin
+                    if (rd != 5'd0)
+                        rf[rd] <= csr_read_data;
+
+                    if (csr_write_enable) begin
+                        case (csr_addr)
+                            CSR_MSTATUS:
+                                // Implemented machine status fields: MIE, MPIE, MPP.
+                                csr_mstatus <= csr_write_data & 32'h0000_1888;
+                            CSR_MTVEC:
+                                csr_mtvec <= csr_write_data;
+                            CSR_MSCRATCH:
+                                csr_mscratch <= csr_write_data;
+                            CSR_MEPC:
+                                csr_mepc <= {csr_write_data[31:1], 1'b0};
+                            CSR_MCAUSE:
+                                csr_mcause <= csr_write_data;
+                            default: begin end
+                        endcase
                     end
                 end
             end
