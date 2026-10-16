@@ -580,7 +580,14 @@ begin
                 if(rd != 0)
                     rf[rd] <= ex_pc + 32'd4;
 
-                pc <= ex_pc + imm_j;
+                // Redirect fetch and flush both younger pipeline slots.
+                pc        <= ex_pc + imm_j;
+                instr_addr <= ex_pc + imm_j;
+                if_pc     <= ex_pc + imm_j;
+                if_insn   <= 32'h00000013;
+                ex_pc     <= ex_pc + imm_j;
+                ex_insn   <= 32'h00000013;
+                ex_valid  <= 1'b1;
             end
 
             // =================================================
@@ -591,8 +598,17 @@ begin
             begin
                 if(funct3 == 3'b000)
                 begin
-                    if(rs1_data == rs2_data)
-                        pc <= ex_pc + imm_b;
+                    if(rs1_data == rs2_data) begin
+                        // A taken branch invalidates the sequential-path
+                        // instructions already in IF and ID/EX.
+                        pc         <= ex_pc + imm_b;
+                        instr_addr <= ex_pc + imm_b;
+                        if_pc      <= ex_pc + imm_b;
+                        if_insn    <= 32'h00000013;
+                        ex_pc      <= ex_pc + imm_b;
+                        ex_insn    <= 32'h00000013;
+                        ex_valid   <= 1'b1;
+                    end
                 end
             end
 
