@@ -14,10 +14,11 @@ and does not claim full RISC-V ISA compliance.
 
 The current `tapeout_project/riscv_core.v` decoder is only a subset of RV32I.
 It does not currently implement the full base ISA, CSRs, or architectural
-exception/interrupt handling. Code inspection also suggests that `ex_valid` is
-not cleared after a load/store despite the comment saying it is; the testbench
-flags a repeated store as a failure. This is a regression test intended to expose
-that issue, not a test that has already passed on the current RTL.
+exception/interrupt handling. The first run's trace showed the first ROM
+instruction being executed twice because the registered `instr_addr` and the
+pipeline's instruction capture are misaligned for the combinational instruction
+memory interface. The test starts with `addi x1, x1, 5` so duplicate execution
+changes x1 from 5 to 10 and should be reported as a failure.
 
 ## Run in Vivado/XSim
 
