@@ -285,8 +285,16 @@ module tb_riscv_correctness;
         rom[82] = 32'h0480006f; // failure path: jal to rom[100]
         rom[83] = 32'h0006f463; // bgeu x13, x0, +8: 0xffffffff >= 0 unsigned (taken)
         rom[84] = 32'h0400006f; // failure path: jal to rom[100]
-        rom[85] = 32'h00942023; // sw x9, 0(x8): completion signature
-        rom[86] = 32'h0000006f; // terminal loop
+        // Memory boundary coverage: final byte lane of word 1 and upper
+        // halfword of word 2, with signed and unsigned reads back.
+        rom[85] = 32'h00d003a3; // sb   x13, 7(x0): write 0xff to lane 3
+        rom[86] = 32'h00700b03; // lb   x22, 7(x0) => 0xffffffff
+        rom[87] = 32'h00704b83; // lbu  x23, 7(x0) => 255
+        rom[88] = 32'h00201523; // sh   x2, 10(x0): upper halfword of word 2
+        rom[89] = 32'h00a01c03; // lh   x24, 10(x0) => 10
+        rom[90] = 32'h00a05c83; // lhu  x25, 10(x0) => 10
+        rom[91] = 32'h00942023; // sw x9, 0(x8): completion signature
+        rom[92] = 32'h0000006f; // terminal loop
         rom[100] = 32'h0000006f; // failure loop (watchdog must fire)
 
         repeat (5) @(posedge clk);
@@ -296,7 +304,7 @@ module tb_riscv_correctness;
     // Signature is written to byte address 1020 (word index 255).
     always @(posedge clk) begin
         if (resetb && !finished && dmem[255] == 32'h00000055 &&
-            b_handshake_count == 5 && r_handshake_count == 7) begin
+            b_handshake_count == 7 && r_handshake_count == 11) begin
             finished = 1'b1;
             #1;
             $display("TitoRV directed correctness test results:");
@@ -305,6 +313,7 @@ module tb_riscv_correctness;
             $display("mem[0]=%08h signature=%08h", dmem[0], dmem[255]);
             $display("byte/halfword word=%08h", dmem[1]);
             $display("AXI handshakes AW=%0d W=%0d B=%0d AR=%0d R=%0d", aw_handshake_count, w_handshake_count, b_handshake_count, ar_handshake_count, r_handshake_count);
+            $display("memory boundary words: dmem[1]=%08h dmem[2]=%08h", dmem[1], dmem[2]);
 
             if (dut.rf[1] !== 32'd5 ||
                 dut.rf[2] !== 32'd10 ||
@@ -327,10 +336,10 @@ module tb_riscv_correctness;
                 dut.rf[19] !== 32'd10 ||
                 dut.rf[20] !== 32'd192 ||
                 dut.rf[21] !== 32'd42 ||
-                dut.rf[22] !== 32'd0 ||
-                dut.rf[23] !== 32'd20 ||
-                dut.rf[24] !== 32'd5 ||
-                dut.rf[25] !== 32'd5 ||
+                dut.rf[22] !== 32'hffffffff ||
+                dut.rf[23] !== 32'd255 ||
+                dut.rf[24] !== 32'd10 ||
+                dut.rf[25] !== 32'd10 ||
                 dut.rf[26] !== 32'd15 ||
                 dut.rf[27] !== 32'd15 ||
                 dut.rf[28] !== 32'd1 ||
@@ -338,18 +347,19 @@ module tb_riscv_correctness;
                 dut.rf[30] !== 32'd10 ||
                 dut.rf[31] !== 32'd5 ||
                 dut.rf[0] !== 32'd0 ||
-                aw_handshake_count !== 5 ||
-                w_handshake_count !== 5 ||
-                ar_handshake_count !== 7 ||
-                b_handshake_count !== 5 ||
-                r_handshake_count !== 7 ||
+                aw_handshake_count !== 7 ||
+                w_handshake_count !== 7 ||
+                ar_handshake_count !== 11 ||
+                b_handshake_count !== 7 ||
+                r_handshake_count !== 11 ||
                 dmem[0] !== 32'd15 ||
-                dmem[1] !== 32'h000aff55 ||
+                dmem[1] !== 32'hff0aff55 ||
+                dmem[2] !== 32'h000a0000 ||
                 dmem[255] !== 32'd85) begin
                 $display("FAIL: one or more architectural state checks mismatched.");
                 $fatal(1);
             end else begin
-                $display("PASS: arithmetic, control flow, byte/halfword load-store, AXI, and x0 checks passed.");
+                $display("PASS: arithmetic, branch boundaries, memory lanes, AXI, and x0 checks passed.");
                 $finish;
             end
         end
