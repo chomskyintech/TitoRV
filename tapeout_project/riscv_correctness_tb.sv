@@ -37,6 +37,24 @@ module tb_riscv_correctness;
     integer lane;
     reg finished = 1'b0;
 
+    // Deterministic, independent backpressure on each address/data channel.
+    integer cycle_count = 0;
+    reg aw_seen = 1'b0;
+    reg w_seen = 1'b0;
+    reg [31:0] captured_awaddr = 32'd0;
+    reg [31:0] captured_wdata = 32'd0;
+    reg [3:0] captured_wstrb = 4'd0;
+    reg b_delay_active = 1'b0;
+    integer b_delay_count = 0;
+    integer r_delay_count = 0;
+    reg r_delay_active = 1'b0;
+    reg [31:0] captured_araddr = 32'd0;
+    integer aw_handshake_count = 0;
+    integer w_handshake_count = 0;
+    integer ar_handshake_count = 0;
+    integer b_handshake_count = 0;
+    integer r_handshake_count = 0;
+
     riscv_core dut (
         .clk(clk),
         .resetb(resetb),
@@ -63,41 +81,101 @@ module tb_riscv_correctness;
 
     always @* instr_rdata = rom[instr_addr[9:2]];
 
-    // Simple single-outstanding AXI-Lite memory model.
-    // The core under test issues AW and W together; both READY signals are
-    // held high. Responses remain asserted until their VALID/READY handshake.
+    // Single-outstanding AXI-Lite memory model with independent channel
+    // handshakes and delayed B/R responses. AW and W may arrive on different
+    // cycles; the write commits only after both payloads have been captured.
+    always @* begin
+        M_AXI_AWREADY = resetb && ((cycle_count % 5) >= 2);
+        M_AXI_WREADY  = resetb && ((cycle_count % 7) >= 4);
+        M_AXI_ARREADY = resetb && ((cycle_count % 6) >= 3);
+    end
+
     always @(posedge clk) begin
         if (!resetb) begin
-            M_AXI_BVALID <= 1'b0;
-            M_AXI_RVALID <= 1'b0;
-            M_AXI_RDATA  <= 32'd0;
+            cycle_count       <= 0;
+            aw_seen           <= 1'b0;
+            w_seen            <= 1'b0;
+            captured_awaddr   <= 32'd0;
+            captured_wdata    <= 32'd0;
+            captured_wstrb    <= 4'd0;
+            b_delay_active    <= 1'b0;
+            b_delay_count     <= 0;
+            M_AXI_BVALID      <= 1'b0;
+            M_AXI_BRESP       <= 2'b00;
+            r_delay_active    <= 1'b0;
+            r_delay_count     <= 0;
+            captured_araddr   <= 32'd0;
+            M_AXI_RVALID      <= 1'b0;
+            M_AXI_RDATA       <= 32'd0;
+            M_AXI_RRESP       <= 2'b00;
         end else begin
-            if (M_AXI_BVALID && M_AXI_BREADY)
-                M_AXI_BVALID <= 1'b0;
-            else if (M_AXI_AWVALID && M_AXI_AWREADY &&
-                     M_AXI_WVALID && M_AXI_WREADY &&
-                     !M_AXI_BVALID) begin
-                for (lane = 0; lane < 4; lane = lane + 1)
-                    if (M_AXI_WSTRB[lane])
-                        dmem[M_AXI_AWADDR[9:2]][lane*8 +: 8]
-                            <= M_AXI_WDATA[lane*8 +: 8];
-                M_AXI_BVALID <= 1'b1;
-                M_AXI_BRESP  <= 2'b00;
+            cycle_count <= cycle_count + 1;
+
+            if (M_AXI_AWVALID && M_AXI_AWREADY) aw_handshake_count <= aw_handshake_count + 1;
+            if (M_AXI_WVALID && M_AXI_WREADY)   w_handshake_count  <= w_handshake_count + 1;
+            if (M_AXI_ARVALID && M_AXI_ARREADY) ar_handshake_count <= ar_handshake_count + 1;
+            if (M_AXI_BVALID && M_AXI_BREADY)   b_handshake_count  <= b_handshake_count + 1;
+            if (M_AXI_RVALID && M_AXI_RREADY)   r_handshake_count  <= r_handshake_count + 1;
+
+            if (M_AXI_AWVALID && M_AXI_AWREADY) begin
+                aw_seen         <= 1'b1;
+                captured_awaddr <= M_AXI_AWADDR;
+            end
+            if (M_AXI_WVALID && M_AXI_WREADY) begin
+                w_seen        <= 1'b1;
+                captured_wdata <= M_AXI_WDATA;
+                captured_wstrb <= M_AXI_WSTRB;
             end
 
+            if (!b_delay_active && !M_AXI_BVALID &&
+                (aw_seen || (M_AXI_AWVALID && M_AXI_AWREADY)) &&
+                (w_seen || (M_AXI_WVALID && M_AXI_WREADY))) begin
+                for (lane = 0; lane < 4; lane = lane + 1) begin
+                    if ((M_AXI_WVALID && M_AXI_WREADY) ? M_AXI_WSTRB[lane] : captured_wstrb[lane])
+                        dmem[((M_AXI_AWVALID && M_AXI_AWREADY) ? M_AXI_AWADDR[9:2] : captured_awaddr[9:2])]
+                            [lane*8 +: 8]
+                            <= ((M_AXI_WVALID && M_AXI_WREADY) ? M_AXI_WDATA[lane*8 +: 8] : captured_wdata[lane*8 +: 8]);
+                end
+                b_delay_active <= 1'b1;
+                b_delay_count  <= 2;
+                aw_seen        <= 1'b0;
+                w_seen         <= 1'b0;
+            end
+
+            if (b_delay_active && !M_AXI_BVALID) begin
+                if (b_delay_count == 0) begin
+                    M_AXI_BVALID <= 1'b1;
+                    M_AXI_BRESP  <= 2'b00;
+                    b_delay_active <= 1'b0;
+                end else begin
+                    b_delay_count <= b_delay_count - 1;
+                end
+            end
+            if (M_AXI_BVALID && M_AXI_BREADY)
+                M_AXI_BVALID <= 1'b0;
+
+            if (M_AXI_ARVALID && M_AXI_ARREADY && !r_delay_active && !M_AXI_RVALID) begin
+                captured_araddr <= M_AXI_ARADDR;
+                r_delay_active  <= 1'b1;
+                r_delay_count   <= 3;
+            end
+            if (r_delay_active && !M_AXI_RVALID) begin
+                if (r_delay_count == 0) begin
+                    M_AXI_RDATA    <= dmem[captured_araddr[9:2]];
+                    M_AXI_RRESP    <= 2'b00;
+                    M_AXI_RVALID   <= 1'b1;
+                    r_delay_active <= 1'b0;
+                end else begin
+                    r_delay_count <= r_delay_count - 1;
+                end
+            end
             if (M_AXI_RVALID && M_AXI_RREADY)
                 M_AXI_RVALID <= 1'b0;
-            else if (M_AXI_ARVALID && M_AXI_ARREADY && !M_AXI_RVALID) begin
-                M_AXI_RDATA  <= dmem[M_AXI_ARADDR[9:2]];
-                M_AXI_RRESP  <= 2'b00;
-                M_AXI_RVALID <= 1'b1;
-            end
         end
     end
 
-    // The current RTL comment says ex_valid is cleared when a memory
-    // instruction is issued, but the implementation does not clear it.
     // Catch a replay of the first store instead of waiting for the watchdog.
+    // Count distinct accepted AW and W channel handshakes for diagnostics.
     always @(posedge clk) begin
         if (resetb && !finished &&
             M_AXI_AWVALID && M_AXI_AWREADY &&
@@ -150,6 +228,7 @@ module tb_riscv_correctness;
             $display("x1=%08h x2=%08h x3=%08h x4=%08h", dut.rf[1], dut.rf[2], dut.rf[3], dut.rf[4]);
             $display("x5=%08h x6=%08h x8=%08h x9=%08h", dut.rf[5], dut.rf[6], dut.rf[8], dut.rf[9]);
             $display("mem[0]=%08h signature=%08h", dmem[0], dmem[255]);
+            $display("AXI handshakes AW=%0d W=%0d B=%0d AR=%0d R=%0d", aw_handshake_count, w_handshake_count, b_handshake_count, ar_handshake_count, r_handshake_count);
 
             if (dut.rf[1] !== 32'd5 ||
                 dut.rf[2] !== 32'd10 ||
@@ -167,6 +246,11 @@ module tb_riscv_correctness;
                 dut.rf[15] !== 32'd0 ||
                 dut.rf[16] !== 32'd9 ||
                 dut.rf[0] !== 32'd0 ||
+                aw_handshake_count !== 2 ||
+                w_handshake_count !== 2 ||
+                ar_handshake_count !== 1 ||
+                b_handshake_count !== 2 ||
+                r_handshake_count !== 1 ||
                 dmem[0] !== 32'd15 ||
                 dmem[255] !== 32'd85) begin
                 $display("FAIL: one or more architectural state checks mismatched.");
