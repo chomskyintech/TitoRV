@@ -128,17 +128,26 @@ jobs:
         run: |
           mise trust .mise.toml
           make
-          test -d work/titorv-rv32i/elfs
-          count=$(find work/titorv-rv32i/elfs -maxdepth 1 -type f -name '*.elf' | wc -l)
+          # ACT4 versions may place generated ELF files under per-test build
+          # directories rather than directly in the top-level elfs directory.
+          # Search the entire generated work tree and fail with diagnostics only
+          # if no ELF exists anywhere.
+          find work/titorv-rv32i -type f -name '*.elf' -print | sort > "$RUNNER_TEMP/act4-elf-list.txt"
+          count=$(wc -l < "$RUNNER_TEMP/act4-elf-list.txt")
           echo "Generated ACT4 ELF count: $count"
-          test "$count" -gt 0
+          if [[ "$count" -eq 0 ]]; then
+            echo "No ELF files found under work/titorv-rv32i. Generated files:"
+            find work/titorv-rv32i -maxdepth 5 -type f -print | head -200
+            exit 1
+          fi
+          echo "First generated ELF paths:"
+          head -20 "$RUNNER_TEMP/act4-elf-list.txt"
       - name: Upload generated ACT4 ELFs and build logs
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: titorv-act4-rv32i
           path: |
-            .tools/riscv-arch-test/work/titorv-rv32i/elfs/
-            .tools/riscv-arch-test/work/titorv-rv32i/build/
+            .tools/riscv-arch-test/work/titorv-rv32i/
           if-no-files-found: warn
           retention-days: 14
