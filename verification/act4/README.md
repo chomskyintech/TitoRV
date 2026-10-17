@@ -1,13 +1,13 @@
 # ACT4 integration scaffold for TitoRV
 
-This directory starts the integration with the official [RISC-V Architectural Certification Tests (ACT4)](https://github.com/riscv/riscv-arch-test). It is **not yet marked runnable or certified**. The UDB file includes the machine-mode parameters required by the official UDB loader, with privileged tests disabled. CI has successfully loaded the UDB configuration and validated `sail.json` against the Sail 0.16 JSON Schema. The Sail file is still based on the upstream ACT4 CVW RV32I model, with TitoRV's 64 KiB zero-based RAM, completion-token MMIO, and direct-only `mtvec` behavior reflected in the candidate. These checks establish config acceptance, not a validated behavioral model of TitoRV; a platform/CSR/trap audit and a real ACT4 generation run are still required.
+This directory starts the integration with the official [RISC-V Architectural Certification Tests (ACT4)](https://github.com/riscv/riscv-arch-test). It is **not yet marked runnable or certified**. The UDB file includes the machine-mode parameters required by the official UDB loader, with privileged tests disabled. CI has successfully loaded the UDB configuration and validated `sail.json` against the Sail 0.16 JSON Schema. The Sail file is still based on the upstream ACT4 CVW RV32I model, with TitoRV's 128 KiB zero-based ACT4 simulation RAM, completion-token MMIO, and direct-only `mtvec` behavior reflected in the candidate. These checks establish config acceptance, not a validated behavioral model of TitoRV; a platform/CSR/trap audit and a real ACT4 generation run are still required.
 
 ## Target currently established
 
 - XLEN: 32
 - Initial test scope: unprivileged RV32I only
 - Reset / test load address: `0x00000000`
-- Instruction/data test memory: 64 KiB in the existing ELF harness
+- Instruction/data test memory: 128 KiB in the AXI-backed ELF simulation harness
 - Implemented machine CSRs currently documented by TitoRV: `mstatus`, `mtvec`, `mscratch`, `mepc`, `mcause`
 - Termination: write word `1` to `0x20000000` for pass; any other token at that address is failure in `tb_riscv_elf`
 
@@ -24,7 +24,7 @@ The inspected RTL implements only five CSRs, has no interrupt handling, and redi
 - [`test_config.yaml`](./test_config.yaml): ACT4 framework settings; privileged tests disabled.
 - [`titorv-rv32i.yaml`](./titorv-rv32i.yaml): UDB test-generation candidate for unprivileged RV32I with required machine-mode configuration; official loader validation passes in CI.
 - [`sail.json`](./sail.json): Sail 0.16 schema-complete starting point with TitoRV RAM/MMIO addresses; still requires a TitoRV-specific CSR/trap/extension audit.
-- [`link.ld`](./link.ld): ACT4-style linker script targeting the zero-based 64 KiB test memory.
+- [`link.ld`](./link.ld): ACT4-style linker script targeting the zero-based 128 KiB ACT4 simulation memory.
 - [`rvmodel_macros.h`](./rvmodel_macros.h): minimal pass/fail termination macros using the current harness completion convention.
 - [`termination_smoke.S`](./termination_smoke.S): assembly program used to exercise the pass/fail adapter.
 
