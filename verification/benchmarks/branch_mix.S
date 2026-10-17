@@ -2,7 +2,7 @@
 .globl _start
 _start:
     li t0, 0
-    li t1, 1000
+    li t1, 100
     li t2, 0
 1:
     addi t0, t0, 1
