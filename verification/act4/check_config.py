@@ -3,7 +3,7 @@
 
 This is deliberately not an ACT4/UDB/Sail semantic validator.
 """
-import json
+import json5
 from pathlib import Path
 import sys
 
@@ -19,7 +19,7 @@ def require(condition, message):
 try:
     framework = yaml.safe_load((root / "test_config.yaml").read_text())
     udb = yaml.safe_load((root / "titorv-rv32i.yaml").read_text())
-    sail = json.loads((root / "sail.json").read_text())
+    sail = json5.loads((root / "sail.json").read_text())
 except Exception as exc:
     print(f"ACT4 config syntax check failed: {exc}", file=sys.stderr)
     sys.exit(1)
