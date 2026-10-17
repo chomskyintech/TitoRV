@@ -1,0 +1,81 @@
+name: TitoRV expanded directed verification
+
+on:
+  push:
+    branches:
+      - verification/alu-boundary-regression
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  expanded-verification:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Check out TitoRV
+        uses: actions/checkout@v4
+
+      - name: Install Icarus Verilog
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y iverilog
+
+      - name: Compile system wrapper
+        run: |
+          iverilog -g2012 -Wall -I tapeout_project -s riscv_system_top \
+            -o /tmp/titorv-system tapeout_project/design.sv
+
+      - name: Run illegal-encoding and system-exception regression
+        shell: bash
+        run: |
+          set -euo pipefail
+          for case_id in 0 1 2 3 4 5 6 7 8; do
+            echo "=== Illegal instruction regression case ${case_id} ==="
+            iverilog -g2012 -Wall -s tb_riscv_correctness \
+              -Ptb_riscv_correctness.ILLEGAL_CASE=${case_id} \
+              -o /tmp/titorv-test-${case_id} \
+              tapeout_project/riscv_core.v tapeout_project/riscv_correctness_tb.sv
+            vvp /tmp/titorv-test-${case_id}
+          done
+
+      - name: Run machine CSR regression
+        run: |
+          iverilog -g2012 -Wall -s tb_riscv_csr \
+            -o /tmp/titorv-csr-test \
+            tapeout_project/riscv_core.v tapeout_project/riscv_csr_tb.sv
+          vvp /tmp/titorv-csr-test
+
+      - name: Run machine trap entry and MRET regression
+        shell: bash
+        run: |
+          set -euo pipefail
+          for trap_case in 0 1 2; do
+            echo "=== Machine trap regression case ${trap_case} ==="
+            iverilog -g2012 -Wall -s tb_riscv_trap \
+              -Ptb_riscv_trap.TRAP_CASE=${trap_case} \
+              -o /tmp/titorv-trap-test-${trap_case} \
+              tapeout_project/riscv_core.v tapeout_project/riscv_trap_tb.sv
+            vvp /tmp/titorv-trap-test-${trap_case}
+          done
+
+      - name: Run control-flow wrong-path squash regression
+        shell: bash
+        run: |
+          set -euo pipefail
+          for flow_case in 0 1 2; do
+            echo "=== Control-flow regression case ${flow_case} ==="
+            iverilog -g2012 -Wall -s tb_riscv_controlflow \
+              -Ptb_riscv_controlflow.FLOW_CASE=${flow_case} \
+              -o /tmp/titorv-controlflow-test-${flow_case} \
+              tapeout_project/riscv_core.v tapeout_project/riscv_controlflow_tb.sv
+            vvp /tmp/titorv-controlflow-test-${flow_case}
+          done
+
+      - name: Run ALU boundary and dependency regression
+        run: |
+          iverilog -g2012 -Wall -s tb_riscv_alu_edges \
+            -o /tmp/titorv-alu-edges-test \
+            tapeout_project/riscv_core.v tapeout_project/riscv_alu_edges_tb.sv
+          vvp /tmp/titorv-alu-edges-test
