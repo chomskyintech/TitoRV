@@ -1,50 +1,51 @@
 # TitoRV ISA Support Audit
 
 **Audited branch:** `verification/riscv-directed-tests`  
-**Audited RTL:** `tapeout_project/riscv_core.v`  
-**Status:** preliminary source-level audit; not a RISC-V compliance claim.
+**RTL under audit:** `tapeout_project/riscv_core.v`  
+**Status:** source-level support inventory plus directed simulation evidence. This is not a RISC-V compliance claim.
 
 ## Summary
 
-TitoRV is currently a small 32-bit, in-order pipelined core with an instruction-memory interface and a single-outstanding AXI-Lite data interface. The RTL implements a limited subset of RV32I-style behaviour. It must not yet be described as a complete RV32I processor.
+TitoRV is a 32-bit, in-order pipelined core with an instruction-memory interface and a single-outstanding AXI-Lite data interface. The RTL implements most RV32I integer instruction decode paths, subword memory transfers, selected machine-mode CSR operations, and a basic machine-mode trap path. The whole architecture is **not yet established as RV32I-compliant**: the ELF smoke regression is directed, memory-ordering behaviour is not comprehensively verified, and no RISC-V Architectural Certification Tests (ACT4) have been run.
 
-## Intended instruction subset
+## Implemented RV32I instruction classes
 
-| Instruction | Encoding class | Observed behaviour |
+| Class | Encodings / operations implemented in RTL | ELF regression coverage |
 |---|---|---|
-| `LUI` | U-type, opcode `0110111` | Writes the upper 20-bit immediate shifted left by 12 to `rd`. |
-| `ADDI` | I-type, opcode `0010011`, `funct3=000` | Adds sign-extended 12-bit immediate to `rs1`. |
-| `ADD` | R-type, opcode `0110011`, `funct3=000`, `funct7=0000000` | Adds `rs1` and `rs2`. |
-| `SUB` | R-type, opcode `0110011`, `funct3=000`, `funct7=0100000` | Subtracts `rs2` from `rs1`. |
-| `BEQ` | B-type, opcode `1100011`, `funct3=000` | Redirects control flow when `rs1 == rs2`. |
-| `JAL` | J-type, opcode `1101111` | Jumps to `PC + sign-extended offset` and writes `PC + 4` to `rd`. |
-| `LW` | I-type, opcode `0000011`, `funct3=010` | Issues an AXI-Lite word read and writes returned data to `rd`. |
-| `SW` | S-type, opcode `0100011`, `funct3=010` | Issues an AXI-Lite word write with all four byte strobes asserted. |
+| Upper immediates | `LUI`, `AUIPC` | LUI is used to form values and addresses; AUIPC is checked against its instruction address |
+| Integer register-immediate | `ADDI`, `SLTI`, `SLTIU`, `XORI`, `ORI`, `ANDI`, `SLLI`, `SRLI`, `SRAI` | Directed result checks |
+| Integer register-register | `ADD`, `SUB`, `SLL`, `SLT`, `SLTU`, `XOR`, `SRL`, `SRA`, `OR`, `AND` | Directed result checks |
+| Conditional branches | `BEQ`, `BNE`, `BLT`, `BGE`, `BLTU`, `BGEU` | Taken and not-taken paths |
+| Jumps | `JAL`, `JALR` | Link values, JALR bit-0 clearing, and fall-through squash |
+| Loads | `LB`, `LH`, `LW`, `LBU`, `LHU` | Word round trip plus signed/unsigned byte and halfword loads |
+| Stores | `SB`, `SH`, `SW` | Word store/load and byte/halfword lane checks |
 
-The table above describes the intended subset, not fully validated instruction decoding. The caveats below are important.
+The table records implemented paths and the intended regression coverage; it does not imply every immediate, boundary, hazard, or misalignment case has been tested.
 
-## Known decode and architectural limitations
+## Additional system behaviour
 
-- **Opcode/funct validation is incomplete.** For the OP-IMM opcode, the ALU currently performs addition for every `funct3`; it does not reject or correctly implement encodings such as `SLTI`, `XORI`, `ORI`, `ANDI`, or shifts. Do not treat those encodings as supported.
-- **R-type validation is incomplete.** For `funct3=000`, the core subtracts when `funct7=0100000` and otherwise adds; it does not validate all remaining `funct7` bits before executing ADD-like behaviour. Other R-type `funct3` values also fall through to addition.
-- **Load/store width validation is incomplete.** The load and store paths issue 32-bit transfers without checking `funct3`. Byte and halfword operations, sign/zero extension, and subword store strobes are not implemented.
-- **Only BEQ is implemented for conditional branches.** BNE, BLT, BGE, BLTU, and BGEU are not implemented.
-- **JALR is not implemented.** AUIPC is not implemented.
-- **The wider RV32I instruction set is incomplete.** This includes logical operations, shifts, comparisons/set-less-than, and other missing base instructions.
-- **Exceptions and traps are not established by the current tests.** Illegal-instruction handling, misaligned access handling, and architectural trap behaviour have not been demonstrated.
-- **Memory system assumptions are limited.** The current testbench uses a simple instruction ROM and a single-outstanding AXI-Lite data-memory model. It does not establish correctness for caches, multiple outstanding requests, or a complete system memory map.
-- **Pipeline hazards need broader validation.** The current directed suite covers selected instruction sequences, branches, jumps, and memory stalls; it does not exhaustively prove all data/control hazard combinations.
+- The RTL has a small machine-mode CSR bank: `mstatus`, `mtvec`, `mscratch`, `mepc`, and `mcause`.
+- Implemented CSR instruction forms include register and immediate variants of `CSRRW`, `CSRRS`, and `CSRRC`, restricted to those supported CSRs.
+- `ECALL`, `EBREAK`, and `MRET` have a basic machine-mode trap/return path. Existing directed CI tests cover selected illegal encodings, CSR operations, trap entry, and MRET.
+- The opcode class for `FENCE` is accepted by the decoder, but complete memory-ordering semantics have not been independently established by the current tests.
 
-## Evidence currently available
+These system features should not be confused with complete privileged-architecture or Zicsr compliance.
 
-The repository's directed correctness testbench checks selected arithmetic/register operations, LUI, BEQ taken and untaken, JAL/link behaviour, word load/store, `x0`, and AXI-Lite backpressure/delayed responses. The corresponding GitHub Actions run passed.
+## Known gaps and limits
 
-That is evidence for those scenarios only. It is **not** a RISC-V Architectural Certification Test result and does not establish full RV32I compliance.
+- **No ACT4 result yet.** The ELF program is a custom self-checking smoke test using a store of `1` to `0x20000000` as its completion token. This is not the official `RVMODEL_HALT_PASS` protocol.
+- **No exhaustive instruction proof.** The current tests use selected values and sequences; they do not exhaustively cover all opcode/funct combinations, immediate boundaries, signedness edges, or interactions between every instruction pair.
+- **Memory corner cases need work.** Misaligned accesses, all byte-lane combinations, response errors, and more varied AXI-Lite backpressure patterns are not comprehensively tested by the ELF harness.
+- **Exceptions and interrupts are incomplete.** The current trap path is limited and does not establish full privileged-specification behaviour, interrupt handling, or all architectural exception conditions.
+- **Pipeline hazards need broader validation.** Directed programs test representative data dependencies and control-flow squashing, not every dependency and timing combination.
+- **Other extensions are out of scope.** RV32M multiply/divide, compressed instructions, atomics, and floating point are not part of this RV32I target and are not implemented as part of this work.
 
-## Recommended next work
+## Verification workflow
 
-1. Make instruction decoding strict: validate opcode, `funct3`, and `funct7`; ensure unsupported encodings do not accidentally execute as ADD/ADDI or word loads/stores.
-2. Decide the target profile (for example, a clearly documented custom subset or full RV32I).
-3. Add directed tests for each implemented instruction and edge case.
-4. If targeting RV32I, implement the missing base instructions and architectural exception behaviour before running an appropriate RISC-V architectural test suite.
-5. Keep this document updated as features are implemented and verified.
+1. Run the ELF execution harness with a compiled RV32I program and make every failure token distinct from the PASS token.
+2. Run directed correctness, CSR/trap, control-flow squash, and baseline smoke workflows.
+3. Expand corner-case coverage for ALU boundaries, memory lanes, hazards, and illegal/reserved encodings.
+4. Integrate the RISC-V Architectural Certification Tests with an appropriate test environment, linker/configuration, signature reporting, and the official termination protocol.
+5. Claim compliance only after the applicable certification suite and additional microarchitectural verification pass.
+
+A green smoke test is useful regression evidence, not a substitute for architectural certification.
