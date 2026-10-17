@@ -1,0 +1,72 @@
+name: TitoRV official ACT4 config validation
+
+on:
+  push:
+    branches:
+      - verification/riscv-directed-tests
+  pull_request:
+    branches:
+      - master
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  udb-config:
+    name: Official UDB configuration load
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check out RISC-V Unified Database
+        uses: actions/checkout@v4
+        with:
+          repository: riscv/riscv-unified-db
+          path: .tools/riscv-unified-db
+      - name: Set up UDB toolchain and native dependencies
+        uses: jdx/mise-action@c2a87611a18de5b3828c5652fe268e992400cb5c
+        with:
+          working_directory: .tools/riscv-unified-db
+          version: 2026.9.13
+      - name: Install UDB dependencies without the ISS toolchain
+        working-directory: .tools/riscv-unified-db
+        env:
+          UDB_TOOLCHAIN_NONE: "1"
+        run: |
+          echo "UDB_TOOLCHAIN_NONE=1" > .toolchain-local
+          ./bin/setup
+      - name: Load TitoRV config using official UDB CLI
+        working-directory: .tools/riscv-unified-db
+        env:
+          UDB_ROOT: ${{ github.workspace }}/.tools/riscv-unified-db
+        run: |
+          ./bin/udb list extensions --config "${{ github.workspace }}/verification/act4/titorv-rv32i.yaml"
+  sail-config:
+    name: Sail 0.16 configuration schema
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install JSON Schema validator
+        run: python -m pip install --disable-pip-version-check jsonschema json5
+      - name: Download Sail 0.16 schema
+        run: |
+          curl --fail --location --silent --show-error \
+            https://github.com/riscv/sail-riscv/releases/download/0.16/sail_riscv_config_schema.json \
+            --output /tmp/sail_riscv_config_schema.json
+      - name: Validate Sail configuration
+        run: |
+          python - <<'PY'
+          import json
+          import json5
+          from jsonschema import validate
+          from pathlib import Path
+          schema = json.loads(Path("/tmp/sail_riscv_config_schema.json").read_text())
+          config = json5.loads(Path("verification/act4/sail.json").read_text())
+          validate(instance=config, schema=schema)
+          print("Sail 0.16 configuration passes JSON Schema validation.")
+          PY

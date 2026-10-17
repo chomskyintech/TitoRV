@@ -1,0 +1,28 @@
+ .section .text
+.globl _start
+_start:
+    lui s0, 0x1
+    li t0, 0
+    li t1, 100
+    li t2, 0
+1:
+    sw t0, 0(s0)
+    lw t2, 0(s0)
+    addi t0, t0, 1
+    addi s0, s0, 4
+    addi t1, t1, -1
+    bne t1, zero, 1b
+
+    li t3, 99
+    bne t2, t3, fail
+    j pass
+fail:
+    li t1, 2
+    j finish
+pass:
+    li t1, 1
+finish:
+    lui t0, 0x20000
+    sw t1, 0(t0)
+2:
+    j 2b

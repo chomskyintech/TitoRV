@@ -1,0 +1,33 @@
+name: TitoRV directed correctness simulation
+
+on:
+  push:
+    branches:
+      - verification/riscv-directed-tests
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  directed-correctness:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Check out TitoRV
+        uses: actions/checkout@v4
+
+      - name: Install Icarus Verilog
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y iverilog
+
+      - name: Compile testbench and core
+        run: |
+          iverilog -g2012 -Wall -s tb_riscv_correctness \
+            -o riscv_correctness.vvp \
+            tapeout_project/riscv_core.v \
+            tapeout_project/riscv_correctness_tb.sv
+
+      - name: Run simulation
+        run: vvp riscv_correctness.vvp

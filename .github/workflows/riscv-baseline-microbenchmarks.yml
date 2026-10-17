@@ -1,0 +1,73 @@
+name: TitoRV baseline microbenchmarks
+
+on:
+  push:
+    branches:
+      - verification/alu-boundary-regression
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  microbenchmarks:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Check out TitoRV
+        uses: actions/checkout@v4
+
+      - name: Install RISC-V toolchain and Icarus Verilog
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y gcc-riscv64-unknown-elf binutils-riscv64-unknown-elf iverilog
+
+      - name: Compile ELF execution harness
+        run: |
+          iverilog -g2012 -Wall -s tb_riscv_elf \
+            -o /tmp/titorv-benchmark.vvp \
+            tapeout_project/riscv_core.v tapeout_project/riscv_elf_tb.sv
+
+      - name: Build and run deterministic RV32I benchmarks
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p benchmark-results
+          printf 'benchmark,metrics\n' > benchmark-results/summary.csv
+          python3 verification/generate_alu_differential.py 20261017 verification/benchmarks/alu_randomized.S
+          python3 verification/generate_controlflow_memory.py 20261018 verification/benchmarks/controlflow_memory_randomized.S
+          for name in alu_dependency branch_mix memory_roundtrip controlflow_mem_widths alu_randomized controlflow_memory_randomized; do
+            elf="/tmp/titorv-${name}.elf"
+            bin="/tmp/titorv-${name}.bin"
+            hex="/tmp/titorv-${name}.hex"
+            log="benchmark-results/${name}.log"
+
+            echo "=== Building ${name} ==="
+            riscv64-unknown-elf-gcc \
+              -march=rv32i -mabi=ilp32 -nostdlib -nostartfiles \
+              -fno-pic -fno-pie -Wl,-Ttext=0 -Wl,--no-relax -Wl,-e,_start \
+              -o "$elf" "verification/benchmarks/${name}.S"
+            riscv64-unknown-elf-objcopy -O binary "$elf" "$bin"
+            python3 verification/bin_to_hex.py "$bin" "$hex"
+
+            echo "=== Running ${name} ==="
+            timeout 20s vvp /tmp/titorv-benchmark.vvp "+ROM=$hex" +METRICS 2>&1 | tee "$log"
+            grep -F "PASS: ELF program wrote the PASS token" "$log"
+            metrics="$(grep -F 'BENCHMARK-METRICS ' "$log")"
+            test -n "$metrics"
+            printf '%s,"%s"\n' "$name" "$metrics" >> benchmark-results/summary.csv
+          done
+
+          echo "### TitoRV baseline microbenchmarks" >> "$GITHUB_STEP_SUMMARY"
+          echo 'CPI is a simulation proxy: cycles divided by non-NOP execute slots. The benchmark ELFs intentionally contain no architectural NOP instructions, so flush bubbles are excluded. These are RTL simulation measurements, not clock-frequency or silicon performance results.' >> "$GITHUB_STEP_SUMMARY"
+          echo 'CSV summary follows:' >> "$GITHUB_STEP_SUMMARY"
+          cat benchmark-results/summary.csv >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload benchmark logs and summary
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: titorv-baseline-microbenchmarks
+          path: benchmark-results/
+          if-no-files-found: warn
+          retention-days: 14

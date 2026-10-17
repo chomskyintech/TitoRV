@@ -1,0 +1,207 @@
+name: TitoRV ACT4 RV32I generation and execution
+
+on:
+  push:
+    branches:
+      - act4-end-to-end-rv32i
+  pull_request:
+    branches:
+      - master
+      - verification/riscv-directed-tests
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  act4-rv32i:
+    name: Generate and execute ACT4 RV32I ELFs
+    runs-on: ubuntu-24.04
+    timeout-minutes: 180
+    steps:
+      - name: Check out TitoRV
+        uses: actions/checkout@v4
+
+      - name: Check out official ACT4 framework
+        uses: actions/checkout@v4
+        with:
+          repository: riscv/riscv-arch-test
+          ref: act4
+          path: .tools/act4
+
+      - name: Prepare TitoRV ACT4 configuration
+        run: |
+          set -euo pipefail
+          config_dir="$GITHUB_WORKSPACE/.tools/act4/config/cores/titorv/titorv-rv32i"
+          mkdir -p "$config_dir"
+          cp verification/act4/test_config.yaml \
+             verification/act4/titorv-rv32i.yaml \
+             verification/act4/sail.json \
+             verification/act4/link.ld \
+             verification/act4/rvmodel_macros.h \
+             verification/act4/rvtest_config.h \
+             verification/act4/rvtest_config.svh \
+             "$config_dir/"
+          mkdir -p act4-work
+          chmod 777 act4-work
+
+      - name: Build official ACT4 toolchain image
+        run: docker build --tag riscv-act4 .tools/act4
+
+      - name: Generate RV32I ACT4 ELFs and reference signatures
+        run: |
+          set -euo pipefail
+          docker run --rm \
+            -v "$GITHUB_WORKSPACE/.tools/act4/config/cores/titorv/titorv-rv32i:/act4/config/cores/titorv/titorv-rv32i:ro" \
+            -v "$GITHUB_WORKSPACE/act4-work:/act4/work" \
+            riscv-act4 bash -lc \
+            'cd /act4 && CONFIG_FILES=config/cores/titorv/titorv-rv32i/test_config.yaml EXTENSIONS=I make -j2'
+          elf_root="act4-work/titorv-rv32i/elfs"
+          test -d "$elf_root"
+          count="$(find "$elf_root" -type f -name '*.elf' | wc -l)"
+          echo "Generated ACT4 ELF count: $count"
+          test "$count" -gt 0
+          printf 'generated_elf_count=%s\n' "$count" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Audit generated RV32I test inventory
+        shell: bash
+        run: |
+          set -euo pipefail
+          elf_root="act4-work/titorv-rv32i/elfs"
+          expected="$(mktemp)"
+          actual="$(mktemp)"
+          trap 'rm -f "$expected" "$actual"' EXIT
+          cat > "$expected" <<'EOF'
+          I-add-00
+          I-addi-00
+          I-and-00
+          I-andi-00
+          I-auipc-00
+          I-beq-00
+          I-bge-00
+          I-bgeu-00
+          I-blt-00
+          I-bltu-00
+          I-bne-00
+          I-fence-00
+          I-jal-00
+          I-jalr-00
+          I-lb-00
+          I-lbu-00
+          I-lh-00
+          I-lhu-00
+          I-lui-00
+          I-lw-00
+          I-nop-00
+          I-or-00
+          I-ori-00
+          I-sb-00
+          I-sh-00
+          I-sll-00
+          I-slli-00
+          I-slt-00
+          I-slti-00
+          I-sltiu-00
+          I-sltu-00
+          I-sra-00
+          I-srai-00
+          I-srl-00
+          I-srli-00
+          I-sub-00
+          I-sw-00
+          I-xor-00
+          I-xori-00
+          EOF
+          find "$elf_root" -type f -name '*.elf' -printf '%f\n' | sed 's/\.elf$//' | sort > "$actual"
+          diff -u "$expected" "$actual"
+          count="$(wc -l < "$actual")"
+          echo "Verified exact expected RV32I test inventory: $count ELFs"
+          echo "- Expected test inventory: **$count/$count matched**" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Install RTL simulation tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes iverilog gcc-riscv64-unknown-elf
+
+      - name: Compile TitoRV ELF harness
+        run: |
+          iverilog -g2012 -Wall -s tb_riscv_elf \
+            -o /tmp/titorv-act4.vvp \
+            tapeout_project/riscv_core.v tapeout_project/riscv_elf_tb.sv
+
+      - name: Execute ACT4 ELFs and compare DUT signatures with Sail
+        shell: bash
+        run: |
+          set -euo pipefail
+          elf_root="act4-work/titorv-rv32i/elfs"
+          ref_root="act4-work/titorv-rv32i/build/rv32i/I"
+          mkdir -p act4-results
+          total=0
+          passed=0
+          failed=0
+          mapfile -d '' -t elfs < <(find "$elf_root" -type f -name '*.elf' -print0 | sort -z)
+          : > act4-results/failures.txt
+          for elf in "${elfs[@]}"; do
+            total=$((total + 1))
+            name="$(basename "$elf" .elf)"
+            bin="act4-results/$name.bin"
+            hex="act4-results/$name.hex"
+            log="act4-results/$name.log"
+            dut_sig="act4-results/$name.dut.sig"
+            ref_sig="$ref_root/$name.sig"
+            riscv64-unknown-elf-objcopy -O binary "$elf" "$bin"
+            python3 - "$bin" "$hex" <<'PY'
+          import pathlib, struct, sys
+          src = pathlib.Path(sys.argv[1]).read_bytes()
+          src += b"\x13\x00\x00\x00"[:(-len(src)) % 4]
+          dst = pathlib.Path(sys.argv[2])
+          with dst.open("w") as f:
+              for off in range(0, len(src), 4):
+                  f.write(f"{struct.unpack_from('<I', src, off)[0]:08x}\n")
+          if len(src) > 256 * 1024:
+              raise SystemExit(f"ELF image exceeds TitoRV 256 KiB RAM: {len(src)} bytes")
+          PY
+            sig_start="$(riscv64-unknown-elf-nm -n "$elf" | awk '$3 == "begin_signature" {print $1; exit}')"
+            sig_end="$(riscv64-unknown-elf-nm -n "$elf" | awk '$3 == "end_signature" {print $1; exit}')"
+            if [[ -z "$sig_start" || -z "$sig_end" || ! -s "$ref_sig" ]]; then
+              echo "FAIL: $name missing signature symbols or Sail reference signature" | tee -a act4-results/failures.txt
+              failed=$((failed + 1))
+              continue
+            fi
+            echo "[$total] Running $name (signature $sig_start..$sig_end)"
+            if timeout 20s vvp /tmp/titorv-act4.vvp \
+                 "+ROM=$hex" "+SIG_START=$sig_start" "+SIG_END=$sig_end" "+SIG_OUT=$dut_sig" 2>&1 | tee "$log" \
+               && grep -q "PASS: ELF program wrote the PASS token" "$log" \
+               && test -s "$dut_sig" \
+               && cmp -s "$ref_sig" "$dut_sig"; then
+              passed=$((passed + 1))
+              echo "SIGNATURE PASS: $name"
+            else
+              failed=$((failed + 1))
+              echo "FAILED: $name" | tee -a act4-results/failures.txt
+              if [[ -f "$dut_sig" ]]; then
+                diff -u "$ref_sig" "$dut_sig" > "act4-results/$name.signature.diff" || true
+              fi
+            fi
+          done
+          printf 'Total: %s\nPassed: %s\nFailed: %s\n' "$total" "$passed" "$failed" | tee act4-results/summary.txt
+          {
+            echo "### ACT4 RV32I execution and signature comparison"
+            echo "- Generated ELFs: $total"
+            echo "- Passed termination and Sail signature comparison: $passed"
+            echo "- Failed execution or signature comparison: $failed"
+          } >> "$GITHUB_STEP_SUMMARY"
+          test "$total" -eq 39
+          test "$passed" -eq 39
+          test "$failed" -eq 0
+
+      - name: Upload ACT4 generation and execution artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: titorv-act4-rv32i-results
+          path: |
+            act4-work/titorv-rv32i/
+            act4-results/
+          if-no-files-found: warn
+          retention-days: 14
