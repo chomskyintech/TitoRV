@@ -24,7 +24,7 @@ def main() -> None:
     for r in range(1, 17):
         regs[r] = rng.getrandbits(32)
         lines.append(f"    li x{r}, {s32(regs[r])}")
-    lines += ["    li x20, 4096", "    li x21, 0"]
+    lines += ["    li x20, 32768", "    li x21, 0"]
     # Check both taken and not-taken behavior for all six branch predicates.
     for i in range(120):
         op = rng.choice(list(BRANCHES))
