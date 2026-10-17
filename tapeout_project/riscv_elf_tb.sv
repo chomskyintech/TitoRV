@@ -35,9 +35,13 @@ module tb_riscv_elf;
     integer i;
     integer cycles = 0;
     integer file_handle, line_chars, rom_word_count;
+    integer sig_file_handle, sig_i;
+    reg [31:0] sig_start_addr, sig_end_addr;
     reg [8*256-1:0] line_buffer;
     reg finished = 1'b0;
     reg [8*256-1:0] rom_file;
+    reg [8*256-1:0] sig_out_file;
+    reg have_sig_start, have_sig_end, have_sig_out;
 
     riscv_core dut (
         .clk(clk), .resetb(resetb),
@@ -145,6 +149,23 @@ module tb_riscv_elf;
     end
 
     initial begin
+        have_sig_start = $value$plusargs("SIG_START=%h", sig_start_addr);
+        have_sig_end = $value$plusargs("SIG_END=%h", sig_end_addr);
+        have_sig_out = $value$plusargs("SIG_OUT=%s", sig_out_file);
+        if ((have_sig_start || have_sig_end || have_sig_out) &&
+            !(have_sig_start && have_sig_end && have_sig_out)) begin
+            $display("FAIL: SIG_START, SIG_END, and SIG_OUT must be supplied together");
+            $fatal(1);
+        end
+        if (have_sig_start &&
+            ((sig_start_addr[1:0] != 2'b00) ||
+             (sig_end_addr[1:0] != 2'b00) ||
+             (sig_end_addr <= sig_start_addr) ||
+             (sig_end_addr > WORDS * 4))) begin
+            $display("FAIL: invalid signature bounds start=%08x end=%08x", sig_start_addr, sig_end_addr);
+            $fatal(1);
+        end
+
         for (i = 0; i < WORDS; i = i + 1) begin
             rom[i] = 32'h00000013;
             dmem[i] = 32'd0;
@@ -176,6 +197,20 @@ module tb_riscv_elf;
         resetb = 1'b1;
         wait (finished);
         #20;
+        // Emit the DUT's signature words in the same format as ACT4's Sail
+        // reference signature so CI can compare architectural results.
+        if (have_sig_start) begin
+            sig_file_handle = $fopen(sig_out_file, "w");
+            if (sig_file_handle == 0) begin
+                $display("FAIL: cannot open signature output %0s", sig_out_file);
+                $fatal(1);
+            end
+            for (sig_i = sig_start_addr >> 2; sig_i < (sig_end_addr >> 2); sig_i = sig_i + 1)
+                $fdisplay(sig_file_handle, "%08x", dmem[sig_i]);
+            $fclose(sig_file_handle);
+            $display("SIGNATURE: wrote %0d words from %08x to %08x",
+                     (sig_end_addr - sig_start_addr) >> 2, sig_start_addr, sig_end_addr);
+        end
         $finish;
     end
 
