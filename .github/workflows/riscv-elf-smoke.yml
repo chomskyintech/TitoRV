@@ -63,7 +63,7 @@ jobs:
             test -f "$source"
             echo "=== Building public RV32UI test: $test_name ==="
             riscv64-unknown-elf-gcc \
-              -march=rv32i -mabi=ilp32 -static -mcmodel=medany \
+              -march=rv32i_zicsr -mabi=ilp32 -static -mcmodel=medany \
               -nostdlib -nostartfiles -fno-pic -fno-pie \
               -Iverification/riscv-tests-env \
               -I/tmp/riscv-tests/env/p \
