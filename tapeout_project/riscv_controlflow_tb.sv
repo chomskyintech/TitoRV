@@ -46,7 +46,7 @@ module tb_riscv_controlflow #(parameter integer FLOW_CASE = 0);
             rom[1] = 32'hffffffff; // must be squashed
             rom[2] = 32'h00700193; // target: addi x3,x0,7
         end else begin
-            rom[0] = 32'h00c00093; // addi x1,x0,12
+            rom[0] = 32'h01000093; // addi x1,x0,16
             rom[1] = 32'h00008067; // jalr x0,x1,0
             rom[2] = 32'hffffffff; // must be squashed
             rom[3] = 32'hffffffff; // must be squashed
