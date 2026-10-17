@@ -339,6 +339,9 @@ module tb_riscv_correctness #(
 
         repeat (5) @(posedge clk);
         resetb = 1'b1;
+        // Platform test ROM places a safe trap-loop at byte address 0x190.
+        // Configure mtvec as platform startup state for this directed suite.
+        #1 dut.csr_mtvec = 32'h00000190;
     end
 
     // Signature is written to byte address 1020 (word index 255).
