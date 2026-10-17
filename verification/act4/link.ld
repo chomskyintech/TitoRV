@@ -1,8 +1,8 @@
-/* ACT4 linker layout for TitoRV's existing 64 KiB zero-based ELF harness.
+/* ACT4 linker layout for TitoRV's existing 128 KiB zero-based ACT4 ELF harness.
  * Keep the matching Sail memory region and harness bounds synchronized.
  */
 RAM_ORIGIN = 0x00000000;
-RAM_LENGTH = 0x00010000;
+RAM_LENGTH = 0x00020000;
 TEST_BASE = RAM_ORIGIN;
 NUM_HARTS = 1;
 STACK_SIZE = 0x1000;
@@ -50,5 +50,5 @@ SECTIONS
   _end = .;
 
   ASSERT(_end <= ORIGIN(ram) + LENGTH(ram),
-         "ACT4 ELF exceeds TitoRV's 64 KiB memory")
+         "ACT4 ELF exceeds the 128 KiB ACT4 test memory")
 }
