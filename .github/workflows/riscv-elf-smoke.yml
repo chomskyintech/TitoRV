@@ -83,3 +83,34 @@ jobs:
             echo "=== Running public RV32UI test: $test_name ==="
             vvp /tmp/titorv-elf-smoke.vvp +ROM="/tmp/titorv-riscv-tests-${test_name}.hex"
           done
+
+      - name: Build ACT4 termination adapter smoke ELFs
+        run: |
+          for mode in pass fail; do
+            flags=""
+            if [ "$mode" = "fail" ]; then flags="-DTEST_FAIL"; fi
+            riscv64-unknown-elf-gcc \
+              -march=rv32i -mabi=ilp32 -nostdlib -nostartfiles \
+              -fno-pic -fno-pie -Iverification/act4 $flags \
+              -T verification/act4/link.ld -Wl,--no-relax \
+              -Wl,-e,rvtest_entry_point \
+              verification/act4/termination_smoke.S \
+              -o "/tmp/titorv-act4-${mode}.elf"
+            riscv64-unknown-elf-objcopy -O binary \
+              "/tmp/titorv-act4-${mode}.elf" "/tmp/titorv-act4-${mode}.bin"
+            python3 verification/bin_to_hex.py \
+              "/tmp/titorv-act4-${mode}.bin" "/tmp/titorv-act4-${mode}.hex"
+          done
+
+      - name: Verify ACT4 pass/fail termination adapter
+        shell: bash
+        run: |
+          echo "=== ACT4 adapter PASS token ==="
+          vvp /tmp/titorv-elf-smoke.vvp +ROM=/tmp/titorv-act4-pass.hex
+          echo "=== ACT4 adapter FAIL token must be rejected ==="
+          if vvp /tmp/titorv-elf-smoke.vvp +ROM=/tmp/titorv-act4-fail.hex; then
+            echo "ERROR: harness accepted the ACT4 failure token"
+            exit 1
+          else
+            echo "Expected failure token was rejected by the harness."
+          fi
