@@ -57,18 +57,18 @@ _start:
     j fail
 6:  beq t0, t1, fail
 
-    # JALR must clear target bit zero and link to the following instruction.
+    # JALR clears target bit zero and writes PC+4 to ra.
     la t0, jalr_target
     ori t0, t0, 1
     jalr ra, 0(t0)
-    j fail
-jalr_target:
-    la t1, jalr_returned
-    # Return address should be the instruction immediately after JALR.
 jalr_returned:
-    # Continue with a sentinel result to distinguish success from failure.
+    la t1, jalr_returned
+    bne ra, t1, fail
     li t2, 0x5a
-    bne t2, t2, fail
+    j pass
+
+jalr_target:
+    jalr zero, 0(ra)
 
 pass:
     li t1, 1
