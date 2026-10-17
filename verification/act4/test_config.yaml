@@ -1,0 +1,13 @@
+# ACT4 framework configuration for TitoRV's initial unprivileged RV32I run.
+# This file is not runnable until titorv-rv32i.yaml and sail.json are validated.
+name: titorv-rv32i
+compiler_exe: riscv64-unknown-elf-gcc
+objdump_exe: riscv64-unknown-elf-objdump
+ref_model_exe: sail_riscv_sim
+udb_config: titorv-rv32i.yaml
+linker_script: link.ld
+dut_include_dir: .
+harts: 1
+# TitoRV's machine CSR/trap implementation is partial. Do not select privileged
+# tests until the UDB and Sail configs have been validated against the RTL.
+include_priv_tests: False
