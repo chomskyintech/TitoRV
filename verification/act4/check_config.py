@@ -61,8 +61,8 @@ def region_value(region, field):
         return int(value.get("value", "0"), 0) if isinstance(value.get("value"), str) else value.get("value")
     return int(value, 0) if isinstance(value, str) else value
 
-require(any(region_value(region, "base") == 0 and region_value(region, "size") == 0x10000 for region in memory_regions),
-        "Sail RAM must match TitoRV's 64 KiB zero-based test memory")
+require(any(region_value(region, "base") == 0 and region_value(region, "size") == 0x20000 for region in memory_regions),
+        "Sail RAM must match the 128 KiB zero-based ACT4 simulation memory")
 require(any(region_value(region, "base") == 0x20000000 and region_value(region, "size") == 0x1000 for region in memory_regions),
         "Sail completion MMIO must match the harness at 0x20000000")
 for filename in ("link.ld", "rvmodel_macros.h", "termination_smoke.S"):
