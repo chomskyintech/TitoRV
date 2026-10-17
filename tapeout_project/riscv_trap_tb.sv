@@ -1,7 +1,7 @@
 `timescale 1ns/1ps
 `default_nettype none
 
-module tb_riscv_trap;
+module tb_riscv_trap #(parameter integer TRAP_CASE = 0);
     reg clk = 1'b0;
     reg resetb = 1'b0;
     always #5 clk = ~clk;
@@ -44,7 +44,12 @@ module tb_riscv_trap;
         rom[1]  = csr_insn(12'h305, 5'd1, 3'b001, 5'd0); // csrrw x0,mtvec,x1
         rom[2]  = csr_insn(12'h300, 5'd8, 3'b110, 5'd0); // csrrsi x0,mstatus,8: MIE=1
         rom[3]  = 32'h00900113; // addi x2,x0,9
-        rom[4]  = 32'h00100073; // ebreak at PC=16
+        if (TRAP_CASE == 0)
+            rom[4] = 32'h00100073; // EBREAK at PC=16, cause 3
+        else if (TRAP_CASE == 1)
+            rom[4] = 32'h00000073; // ECALL at PC=16, cause 11
+        else
+            rom[4] = 32'hffffffff; // illegal instruction at PC=16, cause 2
         rom[5]  = 32'h00700193; // resume target PC=20: addi x3,x0,7
         rom[6]  = 32'h0000006f; // stop loop
         rom[16] = 32'h01400213; // handler: addi x4,x0,20
@@ -58,8 +63,8 @@ module tb_riscv_trap;
         #1;
         if (trap_valid !== 1'b1 ||
             trap_pc !== 32'd16 ||
-            trap_cause !== 32'd3 ||
-            dut.csr_mcause !== 32'd3 ||
+            trap_cause !== ((TRAP_CASE == 0) ? 32'd3 : ((TRAP_CASE == 1) ? 32'd11 : 32'd2)) ||
+            dut.csr_mcause !== ((TRAP_CASE == 0) ? 32'd3 : ((TRAP_CASE == 1) ? 32'd11 : 32'd2)) ||
             dut.csr_mepc !== 32'd20 ||
             dut.csr_mtvec !== 32'd64 ||
             dut.rf[2] !== 32'd9 ||
@@ -74,7 +79,7 @@ module tb_riscv_trap;
                      dut.rf[4], dut.pc);
             $fatal(1);
         end
-        $display("PASS: machine trap entry, CSR state, handler, and MRET return passed.");
+        $display("PASS: trap case %0d entry, CSR state, handler, and MRET return passed.", TRAP_CASE);
         $finish;
     end
 
