@@ -1,0 +1,27 @@
+name: TitoRV ACT4 configuration sanity
+
+on:
+  push:
+    branches:
+      - verification/riscv-directed-tests
+  pull_request:
+    branches:
+      - master
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  config-sanity:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install YAML parser
+        run: python -m pip install --disable-pip-version-check PyYAML json5
+      - name: Check ACT4 candidate config syntax and scope
+        run: python verification/act4/check_config.py

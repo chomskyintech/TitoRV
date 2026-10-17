@@ -1,0 +1,230 @@
+name: TitoRV ACT4 RV32I ELF generation
+
+on:
+  push:
+    branches:
+      - verification/riscv-directed-tests
+    paths:
+      - "verification/act4/**"
+      - ".github/workflows/act4-generate-elfs.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  generate-unprivileged-rv32i:
+    name: Generate ACT4 unprivileged RV32I ELFs
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install host dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes make git curl ca-certificates iverilog
+      - name: Install GCC 15 RISC-V toolchain
+        shell: bash
+        run: |
+          set -euo pipefail
+          archive="$RUNNER_TEMP/xpack-riscv-gcc.tar.gz"
+          curl --fail --location --retry 3 --silent --show-error \
+            https://github.com/xpack-dev-tools/riscv-none-elf-gcc-xpack/releases/download/v15.2.0-1/xpack-riscv-none-elf-gcc-15.2.0-1-linux-x64.tar.gz \
+            --output "$archive"
+          echo "aaaa8060c914851a3e5ee1ba82cc3d6f80972f90638a05c6e823a37557a33758  $archive" | sha256sum --check
+          mkdir -p "$HOME/riscv-toolchain"
+          tar xzf "$archive" --directory "$HOME/riscv-toolchain" --strip-components=1
+          test -x "$HOME/riscv-toolchain/bin/riscv-none-elf-gcc"
+          ln -sf riscv-none-elf-gcc "$HOME/riscv-toolchain/bin/riscv64-unknown-elf-gcc"
+          ln -sf riscv-none-elf-objdump "$HOME/riscv-toolchain/bin/riscv64-unknown-elf-objdump"
+          ln -sf riscv-none-elf-objcopy "$HOME/riscv-toolchain/bin/riscv64-unknown-elf-objcopy"
+          echo "$HOME/riscv-toolchain/bin" >> "$GITHUB_PATH"
+          "$HOME/riscv-toolchain/bin/riscv64-unknown-elf-gcc" --version
+          "$HOME/riscv-toolchain/bin/riscv64-unknown-elf-objdump" --version
+      - name: Check out official ACT4 framework
+        uses: actions/checkout@v4
+        with:
+          repository: riscv/riscv-arch-test
+          ref: act4
+          path: .tools/riscv-arch-test
+      - name: Set up ACT4 framework tools
+        uses: jdx/mise-action@c2a87611a18de5b3828c5652fe268e992400cb5c
+        with:
+          working_directory: .tools/riscv-arch-test
+          version: 2026.9.13
+      - name: Install Sail 0.16 reference model
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$HOME/riscv-sail"
+          curl --fail --location --silent --show-error \
+            https://github.com/riscv/sail-riscv/releases/download/0.16/sail-riscv-Linux-x86_64.tar.gz \
+            | tar xz --directory "$HOME/riscv-sail" --strip-components=1
+          sail_binary=$(find "$HOME/riscv-sail" -type f -name sail_riscv_sim -print -quit)
+          if [[ -z "$sail_binary" ]]; then
+            echo "Could not find sail_riscv_sim in the extracted Sail release."
+            find "$HOME/riscv-sail" -maxdepth 4 -type f -print
+            exit 1
+          fi
+          chmod +x "$sail_binary"
+          echo "$(dirname "$sail_binary")" >> "$GITHUB_PATH"
+          "$sail_binary" --version
+      - name: Install TitoRV ACT4 configuration
+        run: |
+          mkdir -p .tools/riscv-arch-test/config/cores/chomskyintech/titorv-rv32i
+          cp verification/act4/test_config.yaml \
+             verification/act4/titorv-rv32i.yaml \
+             verification/act4/sail.json \
+             verification/act4/link.ld \
+             verification/act4/rvmodel_macros.h \
+             .tools/riscv-arch-test/config/cores/chomskyintech/titorv-rv32i/
+      - name: Prepare generation-only Sail platform shim
+        shell: bash
+        run: |
+          set -euo pipefail
+          # ACT4's ELF-generation helper requires a configured CLINT and simple
+          # interrupt generator even when generating unprivileged RV32I tests.
+          # Keep verification/act4/sail.json truthful to TitoRV; alter only the
+          # temporary copy consumed by the upstream generator. These devices
+          # are not implemented by TitoRV and are outside the selected test scope.
+          python3 -m pip install --user --break-system-packages json5
+          python3 - <<'PY'
+          import json
+          import json5
+          from pathlib import Path
+
+          path = Path(".tools/riscv-arch-test/config/cores/chomskyintech/titorv-rv32i/sail.json")
+          config = json5.loads(path.read_text())
+          platform = config["platform"]
+          platform["clint"]["supported"] = True
+          platform["simple_interrupt_generator"]["supported"] = True
+
+          regions = config["memory"]["regions"]
+          mmio_template = next(r for r in regions if int(r["base"]["value"], 0) == 0x20000000)
+          def mmio_region(base, size):
+              region = json.loads(json.dumps(mmio_template))
+              region["base"]["value"] = hex(base)
+              region["size"]["value"] = hex(size)
+              return region
+
+          regions.extend([
+              mmio_region(0x02000000, 0x000C0000),  # generator-required CLINT map
+              mmio_region(0x0C000000, 0x00001000),  # page-aligned generator-required interrupt source
+          ])
+          # Sail requires memory regions to be ordered by ascending base address.
+          # Appending the generator-only low-address MMIO regions caused validation
+          # to fail when Sail encountered them after the 0x20000000 region.
+          regions.sort(key=lambda region: int(region["base"]["value"], 0))
+          path.write_text(json.dumps(config, indent=2) + "\n")
+          print("Prepared temporary Sail config for ACT4 generation only.")
+          print("Repository sail.json remains unchanged; CLINT/interrupt tests remain out of scope.")
+          PY
+      - name: Generate unprivileged RV32I tests and self-checking ELFs
+        working-directory: .tools/riscv-arch-test
+        env:
+          CONFIG_FILES: config/cores/chomskyintech/titorv-rv32i/test_config.yaml
+          EXTENSIONS: I
+          JOBS: "2"
+        run: |
+          mise trust .mise.toml
+          make
+          # ACT4 versions may place generated ELF files under per-test build
+          # directories rather than directly in the top-level elfs directory.
+          # Run only the self-checking execution ELFs. The sibling build/ tree also contains
+          # signature-only *.sig.elf artifacts that use the architectural signature
+          # protocol and do not use this simulation harness termination adapter.
+          find work/titorv-rv32i/elfs/rv32i/I -type f -name '*.elf' -print | sort > "$RUNNER_TEMP/act4-elf-list.txt"
+          count=$(wc -l < "$RUNNER_TEMP/act4-elf-list.txt")
+          echo "Generated ACT4 ELF count: $count"
+          if [[ "$count" -eq 0 ]]; then
+            echo "No ELF files found under work/titorv-rv32i. Generated files:"
+            find work/titorv-rv32i -maxdepth 5 -type f -print | head -200
+            exit 1
+          fi
+          echo "First generated ELF paths:"
+          head -20 "$RUNNER_TEMP/act4-elf-list.txt"
+      - name: Execute generated ACT4 RV32I ELFs on TitoRV
+        shell: bash
+        run: |
+          set -uo pipefail
+          mapfile -t elfs < <(find .tools/riscv-arch-test/work/titorv-rv32i/elfs/rv32i/I -type f -name '*.elf' | sort)
+          echo "Discovered ACT4 ELF files: ${#elfs[@]}"
+          if [[ "${#elfs[@]}" -eq 0 ]]; then
+            echo "No ACT4 ELF files available to execute."
+            exit 1
+          fi
+
+          iverilog -g2012 -Wall -s tb_riscv_elf \
+            -o "$RUNNER_TEMP/titorv-act4.vvp" \
+            tapeout_project/riscv_core.v tapeout_project/riscv_elf_tb.sv
+
+          mkdir -p "$RUNNER_TEMP/act4-results"
+          pass_count=0
+          fail_count=0
+          index=0
+          for elf in "${elfs[@]}"; do
+            index=$((index + 1))
+            name=$(basename "$elf" .elf)
+            bin="$RUNNER_TEMP/act4-results/${index}-${name}.bin"
+            hex="$RUNNER_TEMP/act4-results/${index}-${name}.hex"
+            log="$RUNNER_TEMP/act4-results/${index}-${name}.log"
+            echo "=== ACT4 [${index}/${#elfs[@]}]: $elf ==="
+            if ! riscv64-unknown-elf-objcopy -O binary "$elf" "$bin"; then
+              echo "FAIL: objcopy failed for $elf" | tee "$log"
+              fail_count=$((fail_count + 1))
+              continue
+            fi
+            if ! python3 verification/bin_to_hex.py "$bin" "$hex"; then
+              echo "FAIL: binary-to-hex conversion failed for $elf" | tee "$log"
+              fail_count=$((fail_count + 1))
+              continue
+            fi
+            if timeout 30s vvp "$RUNNER_TEMP/titorv-act4.vvp" +ROM="$hex" >"$log" 2>&1; then
+              if grep -Eq '^PASS: (ELF program wrote the PASS token|public RISC-V test exited successfully)' "$log"; then
+                echo "PASS: $name"
+                pass_count=$((pass_count + 1))
+              else
+                echo "FAIL: no recognized PASS marker for $name"
+                cat "$log"
+                fail_count=$((fail_count + 1))
+              fi
+            else
+              status=$?
+              echo "FAIL: simulator status $status for $name"
+              cat "$log"
+              fail_count=$((fail_count + 1))
+            fi
+          done
+
+          {
+            echo "# ACT4 RV32I execution summary"
+            echo
+            echo "- Commit: $GITHUB_SHA"
+            echo "- Discovered ELF files: ${#elfs[@]}"
+            echo "- Passed: $pass_count"
+            echo "- Failed: $fail_count"
+          } | tee "$RUNNER_TEMP/act4-results/SUMMARY.md"
+          echo "ACT4_PASS_COUNT=$pass_count" >> "$GITHUB_ENV"
+          echo "ACT4_FAIL_COUNT=$fail_count" >> "$GITHUB_ENV"
+          if [ "$fail_count" -ne 0 ]; then
+            exit 1
+          fi
+
+      - name: Upload ACT4 execution results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: titorv-act4-rv32i-execution-results
+          path: "${{ runner.temp }}/act4-results/"
+          if-no-files-found: warn
+          retention-days: 14
+
+      - name: Upload generated ACT4 ELFs and build logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: titorv-act4-rv32i
+          path: |
+            .tools/riscv-arch-test/work/titorv-rv32i/
+          if-no-files-found: warn
+          retention-days: 14

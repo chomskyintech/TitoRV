@@ -1,0 +1,126 @@
+name: TitoRV ELF execution harness smoke test
+
+on:
+  push:
+    branches:
+      - verification/riscv-directed-tests
+  pull_request:
+    branches:
+      - master
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  elf-smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install RISC-V toolchain and Icarus Verilog
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y gcc-riscv64-unknown-elf binutils-riscv64-unknown-elf iverilog
+
+      - name: Build RV32I smoke ELF
+        run: |
+          riscv64-unknown-elf-gcc \
+            -march=rv32i -mabi=ilp32 -nostdlib -nostartfiles \
+            -Wl,-Ttext=0 -Wl,--no-relax -Wl,-e,_start \
+            -o /tmp/titorv-elf-smoke.elf verification/elf_smoke.S
+          riscv64-unknown-elf-objcopy -O binary /tmp/titorv-elf-smoke.elf /tmp/titorv-elf-smoke.bin
+          python3 verification/bin_to_hex.py /tmp/titorv-elf-smoke.bin /tmp/titorv-elf-smoke.hex
+          riscv64-unknown-elf-objdump -d /tmp/titorv-elf-smoke.elf
+
+      - name: Compile ELF simulation harness
+        run: |
+          iverilog -g2012 -Wall -s tb_riscv_elf \
+            -o /tmp/titorv-elf-smoke.vvp \
+            tapeout_project/riscv_core.v tapeout_project/riscv_elf_tb.sv
+
+      - name: Run compiled program on TitoRV
+        run: vvp /tmp/titorv-elf-smoke.vvp +ROM=/tmp/titorv-elf-smoke.hex
+
+      - name: Fetch public RISC-V ISA tests
+        run: |
+          git init /tmp/riscv-tests
+          git -C /tmp/riscv-tests remote add origin https://github.com/riscv-software-src/riscv-tests.git
+          git -C /tmp/riscv-tests fetch --depth 1 origin d7e86f701b929b5d801f8cda1a4871ab05f452bb
+          git -C /tmp/riscv-tests checkout --detach d7e86f701b929b5d801f8cda1a4871ab05f452bb
+          git -C /tmp/riscv-tests submodule update --init --recursive --depth 1
+
+      - name: Build public RV32UI instruction tests
+        run: |
+          set -e
+          tests="add addi and andi auipc beq bge bgeu blt bltu bne jal jalr lb lbu lh lhu lui lw or ori sb sh sll slli slt slti sltiu sltu sra srai srl srli sub sw xor xori"
+          for test_name in $tests; do
+            source="/tmp/riscv-tests/isa/rv32ui/${test_name}.S"
+            elf="/tmp/titorv-riscv-tests-${test_name}.elf"
+            bin="/tmp/titorv-riscv-tests-${test_name}.bin"
+            hex="/tmp/titorv-riscv-tests-${test_name}.hex"
+            test -f "$source"
+            echo "=== Building public RV32UI test: $test_name ==="
+            riscv64-unknown-elf-gcc \
+              -march=rv32i_zicsr -mabi=ilp32 -static -mcmodel=medany \
+              -nostdlib -nostartfiles -fno-pic -fno-pie \
+              -Iverification/riscv-tests-env \
+              -I/tmp/riscv-tests/env/p \
+              -I/tmp/riscv-tests/isa/macros/scalar \
+              -T verification/riscv-tests-link.ld \
+              -Wl,--no-relax -Wl,-e,_start \
+              "$source" -o "$elf"
+            riscv64-unknown-elf-objcopy -O binary "$elf" "$bin"
+            python3 verification/bin_to_hex.py "$bin" "$hex"
+          done
+
+      - name: Run public RV32I instruction tests on TitoRV
+        run: |
+          set -e
+          tests="add addi and andi auipc beq bge bgeu blt bltu bne jal jalr lb lbu lh lhu lui lw or ori sb sh sll slli slt slti sltiu sltu sra srai srl srli sub sw xor xori"
+          for test_name in $tests; do
+            echo "=== Running public RV32UI test: $test_name ==="
+            vvp /tmp/titorv-elf-smoke.vvp +ROM="/tmp/titorv-riscv-tests-${test_name}.hex"
+          done
+
+      - name: Build ACT4 termination adapter smoke ELFs
+        run: |
+          for mode in pass fail; do
+            flags=""
+            if [ "$mode" = "fail" ]; then flags="-DTEST_FAIL"; fi
+            riscv64-unknown-elf-gcc \
+              -march=rv32i -mabi=ilp32 -nostdlib -nostartfiles \
+              -fno-pic -fno-pie -Iverification/act4 $flags \
+              -T verification/act4/link.ld -Wl,--no-relax \
+              -Wl,-e,rvtest_entry_point \
+              verification/act4/termination_smoke.S \
+              -o "/tmp/titorv-act4-${mode}.elf"
+            riscv64-unknown-elf-objcopy -O binary \
+              "/tmp/titorv-act4-${mode}.elf" "/tmp/titorv-act4-${mode}.bin"
+            python3 verification/bin_to_hex.py \
+              "/tmp/titorv-act4-${mode}.bin" "/tmp/titorv-act4-${mode}.hex"
+          done
+
+      - name: Verify ACT4 pass/fail termination adapter
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          echo "=== ACT4 adapter PASS token ==="
+          vvp /tmp/titorv-elf-smoke.vvp +ROM=/tmp/titorv-act4-pass.hex | tee /tmp/titorv-act4-pass.log
+          grep -F "PASS: ELF program wrote the PASS token" /tmp/titorv-act4-pass.log
+
+          echo "=== ACT4 adapter FAIL token must be rejected ==="
+          set +e
+          vvp /tmp/titorv-elf-smoke.vvp +ROM=/tmp/titorv-act4-fail.hex > /tmp/titorv-act4-fail.log 2>&1
+          fail_status=$?
+          set -e
+          cat /tmp/titorv-act4-fail.log
+
+          if [ "$fail_status" -eq 0 ]; then
+            echo "ERROR: harness accepted the ACT4 failure token"
+            exit 1
+          fi
+          grep -F "FAIL: unexpected completion token 00000002 at 20000000" /tmp/titorv-act4-fail.log
+          echo "Expected failure token was rejected by the harness."
