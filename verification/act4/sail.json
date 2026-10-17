@@ -324,7 +324,7 @@
       // TitoRV's 64 KiB zero-based executable/data memory.
       {
         "base": { "len": 64, "value": "0x0" },
-        "size": { "len": 64, "value": "0x10000" },
+        "size": { "len": 64, "value": "0x20000" },
         "attributes": {
           "mem_type": "MainMemory",
           "cacheable": true,
