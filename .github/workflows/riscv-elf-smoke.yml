@@ -105,12 +105,22 @@ jobs:
       - name: Verify ACT4 pass/fail termination adapter
         shell: bash
         run: |
+          set -euo pipefail
+
           echo "=== ACT4 adapter PASS token ==="
-          vvp /tmp/titorv-elf-smoke.vvp +ROM=/tmp/titorv-act4-pass.hex
+          vvp /tmp/titorv-elf-smoke.vvp +ROM=/tmp/titorv-act4-pass.hex | tee /tmp/titorv-act4-pass.log
+          grep -F "PASS: ELF program wrote the PASS token" /tmp/titorv-act4-pass.log
+
           echo "=== ACT4 adapter FAIL token must be rejected ==="
-          if vvp /tmp/titorv-elf-smoke.vvp +ROM=/tmp/titorv-act4-fail.hex; then
+          set +e
+          vvp /tmp/titorv-elf-smoke.vvp +ROM=/tmp/titorv-act4-fail.hex > /tmp/titorv-act4-fail.log 2>&1
+          fail_status=$?
+          set -e
+          cat /tmp/titorv-act4-fail.log
+
+          if [ "$fail_status" -eq 0 ]; then
             echo "ERROR: harness accepted the ACT4 failure token"
             exit 1
-          else
-            echo "Expected failure token was rejected by the harness."
           fi
+          grep -F "FAIL: unexpected completion token 00000002 at 20000000" /tmp/titorv-act4-fail.log
+          echo "Expected failure token was rejected by the harness."
