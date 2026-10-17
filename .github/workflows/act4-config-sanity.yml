@@ -22,6 +22,6 @@ jobs:
         with:
           python-version: "3.12"
       - name: Install YAML parser
-        run: python -m pip install --disable-pip-version-check PyYAML
+        run: python -m pip install --disable-pip-version-check PyYAML json5
       - name: Check ACT4 candidate config syntax and scope
         run: python verification/act4/check_config.py
