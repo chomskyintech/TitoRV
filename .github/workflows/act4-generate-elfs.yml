@@ -78,6 +78,43 @@ jobs:
              verification/act4/link.ld \
              verification/act4/rvmodel_macros.h \
              .tools/riscv-arch-test/config/cores/chomskyintech/titorv-rv32i/
+      - name: Prepare generation-only Sail platform shim
+        shell: bash
+        run: |
+          set -euo pipefail
+          # ACT4's ELF-generation helper requires a configured CLINT and simple
+          # interrupt generator even when generating unprivileged RV32I tests.
+          # Keep verification/act4/sail.json truthful to TitoRV; alter only the
+          # temporary copy consumed by the upstream generator. These devices
+          # are not implemented by TitoRV and are outside the selected test scope.
+          python3 -m pip install --user json5
+          python3 - <<'PY'
+          import json
+          import json5
+          from pathlib import Path
+
+          path = Path(".tools/riscv-arch-test/config/cores/chomskyintech/titorv-rv32i/sail.json")
+          config = json5.loads(path.read_text())
+          platform = config["platform"]
+          platform["clint"]["supported"] = True
+          platform["simple_interrupt_generator"]["supported"] = True
+
+          regions = config["memory"]["regions"]
+          mmio_template = next(r for r in regions if int(r["base"]["value"], 0) == 0x20000000)
+          def mmio_region(base, size):
+              region = json.loads(json.dumps(mmio_template))
+              region["base"]["value"] = hex(base)
+              region["size"]["value"] = hex(size)
+              return region
+
+          regions.extend([
+              mmio_region(0x02000000, 0x000C0000),  # generator-required CLINT map
+              mmio_region(0x0C000000, 0x00000020),  # generator-required interrupt source
+          ])
+          path.write_text(json.dumps(config, indent=2) + "\\n")
+          print("Prepared temporary Sail config for ACT4 generation only.")
+          print("Repository sail.json remains unchanged; CLINT/interrupt tests remain out of scope.")
+          PY
       - name: Generate unprivileged RV32I tests and self-checking ELFs
         working-directory: .tools/riscv-arch-test
         env:
