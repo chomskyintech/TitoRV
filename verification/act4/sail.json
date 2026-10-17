@@ -1,0 +1,7 @@
+{
+  "$schema": "https://github.com/riscv/sail-riscv/releases/download/0.16/sail_riscv_config_schema.json",
+  "base": {
+    "xlen": 32,
+    "E": false
+  }
+}
