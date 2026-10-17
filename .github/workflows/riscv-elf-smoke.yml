@@ -51,6 +51,7 @@ jobs:
           riscv64-unknown-elf-gcc \
             -march=rv32i -mabi=ilp32 -static -mcmodel=medany \
             -nostdlib -nostartfiles -fno-pic -fno-pie \
+            -Iverification/riscv-tests-env \
             -I/tmp/riscv-tests/env/p \
             -I/tmp/riscv-tests/isa/macros/scalar \
             -T verification/riscv-tests-link.ld \
