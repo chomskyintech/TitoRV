@@ -19,6 +19,11 @@
   sw t1, 0(t0);           \
 2: j 2b;
 
+/* ACT4 requires this hook for diagnostic strings. The current simulation
+ * harness has no console-output device, so intentionally discard the string.
+ */
+#define RVMODEL_IO_WRITE_STR(_R1, _R2, _R3, _STR_PTR)
+
 /* No extra data section is required by this minimal harness adapter. */
 #define RVMODEL_DATA_SECTION
 
