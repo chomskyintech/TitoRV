@@ -419,7 +419,7 @@ begin
         trap_valid <= 1'b0;
         trap_pc <= 32'd0;
         trap_cause <= 32'd0;
-        csr_mstatus <= 32'd0;
+        csr_mstatus <= 32'h0000_1800;
         csr_mtvec <= 32'd0;
         csr_mscratch <= 32'd0;
         csr_mepc <= 32'd0;
