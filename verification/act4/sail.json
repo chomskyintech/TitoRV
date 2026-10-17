@@ -23,12 +23,10 @@
     // bits of the CSRs that are used as the event selector.
     "hpmevent_width_bits": 32,
     "mcountinhibit": {
-      // Whether the `mcountinhibit` CSR is implemented.
-      "supported": true,
-      // This bits in this value control whether the corresponding
-      // bits of the CSR are writable.  Note that bit 1 cannot be written
-      // to as it is read-only zero.
-      "writable_bits": { "len": 32, "value": "0xFFFF_FFFD" }
+      // TitoRV does not implement the mcountinhibit CSR.
+      "supported": false,
+      // Retain a legal placeholder value; it is ignored when unsupported.
+      "writable_bits": { "len": 32, "value": "0x0" }
     },
     "writable_fiom": false,
     // The top 29 bits in this value control whether the corresponding
@@ -37,8 +35,9 @@
     // corresponding counter is supported. The lowest 3 bits
     // (writable_hpm_counters[2 .. 0]) are ignored.
     "writable_hpm_counters": {
+      // TitoRV has no implemented HPM counters.
       "len": 32,
-      "value": "0xFFFF_FFFF"
+      "value": "0x0"
     },
     // The bits in this value control whether the corresponding bits
     // of the `scounteren` CSR that control access to HPM counters,
