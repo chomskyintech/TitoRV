@@ -42,14 +42,13 @@ jobs:
              verification/act4/rvtest_config.h \
              verification/act4/rvtest_config.svh \
              "$config_dir/"
-          # Keep the ACT4 image's output directory writable by the runner.
           mkdir -p act4-work
           chmod 777 act4-work
 
       - name: Build official ACT4 toolchain image
         run: docker build --tag riscv-act4 .tools/act4
 
-      - name: Generate self-checking RV32I ACT4 ELFs
+      - name: Generate RV32I ACT4 ELFs and reference signatures
         run: |
           set -euo pipefail
           docker run --rm \
@@ -130,22 +129,26 @@ EOF
             -o /tmp/titorv-act4.vvp \
             tapeout_project/riscv_core.v tapeout_project/riscv_elf_tb.sv
 
-      - name: Execute every generated ACT4 ELF on TitoRV
+      - name: Execute ACT4 ELFs and compare DUT signatures with Sail
         shell: bash
         run: |
           set -euo pipefail
           elf_root="act4-work/titorv-rv32i/elfs"
+          ref_root="act4-work/titorv-rv32i/build/rv32i/I"
           mkdir -p act4-results
           total=0
           passed=0
           failed=0
           mapfile -d '' -t elfs < <(find "$elf_root" -type f -name '*.elf' -print0 | sort -z)
+          : > act4-results/failures.txt
           for elf in "${elfs[@]}"; do
             total=$((total + 1))
             name="$(basename "$elf" .elf)"
             bin="act4-results/$name.bin"
             hex="act4-results/$name.hex"
             log="act4-results/$name.log"
+            dut_sig="act4-results/$name.dut.sig"
+            ref_sig="$ref_root/$name.sig"
             riscv64-unknown-elf-objcopy -O binary "$elf" "$bin"
             python3 - "$bin" "$hex" <<'PY'
           import pathlib, struct, sys
@@ -158,23 +161,38 @@ EOF
           if len(src) > 256 * 1024:
               raise SystemExit(f"ELF image exceeds TitoRV 256 KiB RAM: {len(src)} bytes")
           PY
-            echo "[$total] Running $name"
-            if timeout 20s vvp /tmp/titorv-act4.vvp "+ROM=$hex" 2>&1 | tee "$log" \
-               && grep -q "PASS: ELF program wrote the PASS token" "$log"; then
+            sig_start="$(riscv64-unknown-elf-nm -n "$elf" | awk '$3 == "begin_signature" {print $1; exit}')"
+            sig_end="$(riscv64-unknown-elf-nm -n "$elf" | awk '$3 == "end_signature" {print $1; exit}')"
+            if [[ -z "$sig_start" || -z "$sig_end" || ! -s "$ref_sig" ]]; then
+              echo "FAIL: $name missing signature symbols or Sail reference signature" | tee -a act4-results/failures.txt
+              failed=$((failed + 1))
+              continue
+            fi
+            echo "[$total] Running $name (signature $sig_start..$sig_end)"
+            if timeout 20s vvp /tmp/titorv-act4.vvp \
+                 "+ROM=$hex" "+SIG_START=$sig_start" "+SIG_END=$sig_end" "+SIG_OUT=$dut_sig" 2>&1 | tee "$log" \
+               && grep -q "PASS: ELF program wrote the PASS token" "$log" \
+               && test -s "$dut_sig" \
+               && cmp -s "$ref_sig" "$dut_sig"; then
               passed=$((passed + 1))
+              echo "SIGNATURE PASS: $name"
             else
               failed=$((failed + 1))
-              echo "FAILED: $name" | tee -a act4-results/summary.txt
+              echo "FAILED: $name" | tee -a act4-results/failures.txt
+              if [[ -f "$dut_sig" ]]; then
+                diff -u "$ref_sig" "$dut_sig" > "act4-results/$name.signature.diff" || true
+              fi
             fi
           done
           printf 'Total: %s\nPassed: %s\nFailed: %s\n' "$total" "$passed" "$failed" | tee act4-results/summary.txt
           {
-            echo "### ACT4 RV32I execution"
+            echo "### ACT4 RV32I execution and signature comparison"
             echo "- Generated ELFs: $total"
-            echo "- Passed on TitoRV: $passed"
-            echo "- Failed on TitoRV: $failed"
+            echo "- Passed termination and Sail signature comparison: $passed"
+            echo "- Failed execution or signature comparison: $failed"
           } >> "$GITHUB_STEP_SUMMARY"
-          test "$total" -gt 0
+          test "$total" -eq 39
+          test "$passed" -eq 39
           test "$failed" -eq 0
 
       - name: Upload ACT4 generation and execution artifacts
