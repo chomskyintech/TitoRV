@@ -144,16 +144,16 @@ pass_loop:
     j     pass_loop
 
 fail_arith:
-    addi  t6, zero, 1
+    addi  t6, zero, 16
     j     fail
 fail_branch:
-    addi  t6, zero, 2
+    addi  t6, zero, 32
     j     fail
 fail_memory:
-    addi  t6, zero, 3
+    addi  t6, zero, 48
     j     fail
 fail_jump:
-    addi  t6, zero, 4
+    addi  t6, zero, 64
 fail:
     lui   t0, 0x20000
     sw    t6, 0(t0)
