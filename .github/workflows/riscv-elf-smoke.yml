@@ -46,21 +46,35 @@ jobs:
       - name: Fetch public RISC-V ISA tests
         run: git clone --depth 1 --recurse-submodules https://github.com/riscv-software-src/riscv-tests.git /tmp/riscv-tests
 
-      - name: Build public RV32UI ADD test
+      - name: Build public RV32UI instruction tests
         run: |
-          riscv64-unknown-elf-gcc \
-            -march=rv32i -mabi=ilp32 -static -mcmodel=medany \
-            -nostdlib -nostartfiles -fno-pic -fno-pie \
-            -Iverification/riscv-tests-env \
-            -I/tmp/riscv-tests/env/p \
-            -I/tmp/riscv-tests/isa/macros/scalar \
-            -T verification/riscv-tests-link.ld \
-            -Wl,--no-relax -Wl,-e,_start \
-            /tmp/riscv-tests/isa/rv32ui/add.S \
-            -o /tmp/titorv-riscv-tests-add.elf
-          riscv64-unknown-elf-objcopy -O binary /tmp/titorv-riscv-tests-add.elf /tmp/titorv-riscv-tests-add.bin
-          python3 verification/bin_to_hex.py /tmp/titorv-riscv-tests-add.bin /tmp/titorv-riscv-tests-add.hex
-          riscv64-unknown-elf-objdump -d /tmp/titorv-riscv-tests-add.elf
+          set -e
+          tests="add addi and andi auipc beq bge bgeu blt bltu bne jal jalr lb lbu lh lhu lui lw or ori sb sh sll slli slt slti sltiu sltu sra srai srl srli sub sw xor xori"
+          for test_name in $tests; do
+            source="/tmp/riscv-tests/isa/rv32ui/${test_name}.S"
+            elf="/tmp/titorv-riscv-tests-${test_name}.elf"
+            bin="/tmp/titorv-riscv-tests-${test_name}.bin"
+            hex="/tmp/titorv-riscv-tests-${test_name}.hex"
+            test -f "$source"
+            echo "=== Building public RV32UI test: $test_name ==="
+            riscv64-unknown-elf-gcc \
+              -march=rv32i -mabi=ilp32 -static -mcmodel=medany \
+              -nostdlib -nostartfiles -fno-pic -fno-pie \
+              -Iverification/riscv-tests-env \
+              -I/tmp/riscv-tests/env/p \
+              -I/tmp/riscv-tests/isa/macros/scalar \
+              -T verification/riscv-tests-link.ld \
+              -Wl,--no-relax -Wl,-e,_start \
+              "$source" -o "$elf"
+            riscv64-unknown-elf-objcopy -O binary "$elf" "$bin"
+            python3 verification/bin_to_hex.py "$bin" "$hex"
+          done
 
-      - name: Run public RV32UI ADD test on TitoRV
-        run: vvp /tmp/titorv-elf-smoke.vvp +ROM=/tmp/titorv-riscv-tests-add.hex
+      - name: Run public RV32I instruction tests on TitoRV
+        run: |
+          set -e
+          tests="add addi and andi auipc beq bge bgeu blt bltu bne jal jalr lb lbu lh lhu lui lw or ori sb sh sll slli slt slti sltiu sltu sra srai srl srli sub sw xor xori"
+          for test_name in $tests; do
+            echo "=== Running public RV32UI test: $test_name ==="
+            vvp /tmp/titorv-elf-smoke.vvp +ROM="/tmp/titorv-riscv-tests-${test_name}.hex"
+          done
