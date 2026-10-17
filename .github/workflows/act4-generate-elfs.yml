@@ -1,0 +1,76 @@
+name: TitoRV ACT4 RV32I ELF generation
+
+on:
+  push:
+    branches:
+      - verification/riscv-directed-tests
+    paths:
+      - "verification/act4/**"
+      - ".github/workflows/act4-generate-elfs.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  generate-unprivileged-rv32i:
+    name: Generate ACT4 unprivileged RV32I ELFs
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install host and RISC-V compiler dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes make git curl gcc-riscv64-unknown-elf binutils-riscv64-unknown-elf
+      - name: Check out official ACT4 framework
+        uses: actions/checkout@v4
+        with:
+          repository: riscv/riscv-arch-test
+          ref: act4
+          path: .tools/riscv-arch-test
+      - name: Set up ACT4 framework tools
+        uses: jdx/mise-action@c2a87611a18de5b3828c5652fe268e992400cb5c
+        with:
+          working_directory: .tools/riscv-arch-test
+          version: 2026.9.13
+      - name: Install Sail 0.16 reference model
+        run: |
+          mkdir -p "$HOME/riscv-sail"
+          curl --fail --location --silent --show-error \
+            https://github.com/riscv/sail-riscv/releases/download/0.16/sail-riscv-Linux-x86_64.tar.gz \
+            | tar xz --directory "$HOME/riscv-sail" --strip-components=1
+          echo "$HOME/riscv-sail/bin" >> "$GITHUB_PATH"
+          sail_riscv_sim --version
+      - name: Install TitoRV ACT4 configuration
+        run: |
+          mkdir -p .tools/riscv-arch-test/config/cores/chomskyintech/titorv-rv32i
+          cp verification/act4/test_config.yaml \
+             verification/act4/titorv-rv32i.yaml \
+             verification/act4/sail.json \
+             verification/act4/link.ld \
+             verification/act4/rvmodel_macros.h \
+             .tools/riscv-arch-test/config/cores/chomskyintech/titorv-rv32i/
+      - name: Generate unprivileged RV32I tests and self-checking ELFs
+        working-directory: .tools/riscv-arch-test
+        env:
+          CONFIG_FILES: config/cores/chomskyintech/titorv-rv32i/test_config.yaml
+          EXTENSIONS: I
+          JOBS: "2"
+        run: |
+          mise trust .mise.toml
+          make
+          test -d work/titorv-rv32i/elfs
+          count=$(find work/titorv-rv32i/elfs -maxdepth 1 -type f -name '*.elf' | wc -l)
+          echo "Generated ACT4 ELF count: $count"
+          test "$count" -gt 0
+      - name: Upload generated ACT4 ELFs and build logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: titorv-act4-rv32i
+          path: |
+            .tools/riscv-arch-test/work/titorv-rv32i/elfs/
+            .tools/riscv-arch-test/work/titorv-rv32i/build/
+          if-no-files-found: warn
+          retention-days: 14
