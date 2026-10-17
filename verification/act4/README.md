@@ -1,6 +1,6 @@
 # ACT4 integration scaffold for TitoRV
 
-This directory starts the integration with the official [RISC-V Architectural Certification Tests (ACT4)](https://github.com/riscv/riscv-arch-test). It is **not yet marked runnable or certified**. The UDB file now includes the machine-mode parameters required by the official UDB loader, with privileged tests disabled. `sail.json` uses the upstream ACT4 CVW RV32I model as a schema-complete starting point, but its memory map has been changed to TitoRV's 64 KiB zero-based RAM and completion-token MMIO. Neither file is yet a validated behavioral model of TitoRV; official validation and a platform/CSR/trap audit are still required before generated output can be trusted.
+This directory starts the integration with the official [RISC-V Architectural Certification Tests (ACT4)](https://github.com/riscv/riscv-arch-test). It is **not yet marked runnable or certified**. The UDB file includes the machine-mode parameters required by the official UDB loader, with privileged tests disabled. CI has successfully loaded the UDB configuration and validated `sail.json` against the Sail 0.16 JSON Schema. The Sail file is still based on the upstream ACT4 CVW RV32I model, with TitoRV's 64 KiB zero-based RAM, completion-token MMIO, and direct-only `mtvec` behavior reflected in the candidate. These checks establish config acceptance, not a validated behavioral model of TitoRV; a platform/CSR/trap audit and a real ACT4 generation run are still required.
 
 ## Target currently established
 
@@ -15,7 +15,7 @@ This directory starts the integration with the official [RISC-V Architectural Ce
 
 See [`titorv-rv32i-scope.md`](./titorv-rv32i-scope.md) for the RTL-derived instruction/CSR scope and limitations that must drive the ACT4 configuration.
 
-The UDB candidate declares `I` plus `Sm` parameters because UDB requires the machine-mode parameter set even when the initial selected tests are unprivileged. This configuration does not establish privileged compliance; `test_config.yaml` keeps privileged tests disabled. `test_config.yaml` disables privilege-mode tests. This is intended to keep the first test selection focused on unprivileged RV32I; it is **not** a claim that the RTL's extra SYSTEM/CSR behaviour is fully described by the config. The candidate UDB file has not yet been checked with the official UDB validator or ACT4 generator.
+The UDB candidate declares `I` plus `Sm` parameters because UDB requires the machine-mode parameter set even when the initial selected tests are unprivileged. This configuration does not establish privileged compliance; `test_config.yaml` keeps privileged tests disabled. `test_config.yaml` disables privilege-mode tests. This is intended to keep the first test selection focused on unprivileged RV32I; it is **not** a claim that the RTL's extra SYSTEM/CSR behaviour is fully described by the config. The UDB file has passed the official UDB loader check in CI. ACT4 test generation has not yet been run.
 
 The inspected RTL implements only five CSRs, has no interrupt handling, and redirects synchronous traps directly even when `mtvec.MODE` is written as vectored. The official UDB configuration has global behaviour controls such as `TRAP_ON_UNIMPLEMENTED_CSR` and `MTVEC_MODES`; Sail has its own privilege/CSR model. Therefore the minimal Sail candidate must be checked against Sail 0.16 and the ACT4-generated test expectations before any certification-style run.
 
@@ -32,7 +32,7 @@ The ELF CI workflow builds both smoke ELFs and checks that the harness accepts t
 
 ## Remaining work before ACT4 can be run
 
-1. Finish official UDB loading and Sail 0.16 schema validation, then audit the upstream-derived Sail platform, CSR, trap, and extension settings against TitoRV; fix schema or semantic issues reported by the tools.
+1. Audit the upstream-derived Sail platform, CSR, trap, and extension settings against TitoRV. Official UDB loading and Sail 0.16 schema validation pass, but they do not establish semantic equivalence.
 2. Run ACT4 test generation with `include_priv_tests: false` and inspect the selected tests to confirm that no privileged/CSR tests are selected.
 3. Check the generated `rvtest_config.h` and `rvtest_config.svh` and verify linker/load addresses against TitoRV's 64 KiB zero-based harness.
 4. Add the official framework, UDB dependencies, and Sail 0.16 to CI; generate the unprivileged RV32I ELFs and execute each ELF on TitoRV with timeout/unexpected-trap diagnostics and per-test result capture.
