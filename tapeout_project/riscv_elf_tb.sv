@@ -34,6 +34,12 @@ module tb_riscv_elf;
     reg [3:0] saved_wstrb = 4'd0;
     integer i;
     integer cycles = 0;
+    integer retired_count = 0;
+    integer stall_cycles = 0;
+    integer load_count = 0;
+    integer store_count = 0;
+    integer have_metrics = 0;
+    real cpi_proxy;
     integer file_handle, line_chars, rom_word_count;
     integer sig_file_handle, sig_i;
     reg [31:0] sig_start_addr, sig_end_addr;
@@ -75,8 +81,24 @@ module tb_riscv_elf;
             saved_wdata <= 32'd0;
             saved_wstrb <= 4'd0;
             cycles <= 0;
+            retired_count <= 0;
+            stall_cycles <= 0;
+            load_count <= 0;
+            store_count <= 0;
         end else begin
             cycles <= cycles + 1;
+            if (dut.pipe_stall)
+                stall_cycles <= stall_cycles + 1;
+            // This proxy counts non-NOP execute slots. The benchmark programs
+            // contain no architectural NOPs; flush bubbles are therefore excluded.
+            if (dut.ex_valid && !dut.pipe_stall && (dut.ex_insn != 32'h00000013)) begin
+                retired_count <= retired_count + 1;
+                case (dut.ex_insn[6:0])
+                    7'b0000011: load_count <= load_count + 1;
+                    7'b0100011: store_count <= store_count + 1;
+                    default: begin end
+                endcase
+            end
             // Always-ready request channels. Responses are registered below.
             awready <= 1'b1;
             wready <= 1'b1;
@@ -149,6 +171,7 @@ module tb_riscv_elf;
     end
 
     initial begin
+        have_metrics = $test$plusargs("METRICS");
         have_sig_start = $value$plusargs("SIG_START=%h", sig_start_addr);
         have_sig_end = $value$plusargs("SIG_END=%h", sig_end_addr);
         have_sig_out = $value$plusargs("SIG_OUT=%s", sig_out_file);
@@ -196,7 +219,13 @@ module tb_riscv_elf;
         repeat (5) @(posedge clk);
         resetb = 1'b1;
         wait (finished);
-        #20;
+        #1;
+        if (have_metrics) begin
+            cpi_proxy = (retired_count == 0) ? 0.0 : (1.0 * cycles) / retired_count;
+            $display("BENCHMARK-METRICS cycles=%0d executed_non_nop=%0d stall_cycles=%0d loads=%0d stores=%0d CPI_proxy=%0.3f",
+                     cycles, retired_count, stall_cycles, load_count, store_count, cpi_proxy);
+        end
+        #19;
         // Emit the DUT's signature words in the same format as ACT4's Sail
         // reference signature so CI can compare architectural results.
         if (have_sig_start) begin
