@@ -33,6 +33,8 @@ module tb_riscv_elf;
     reg [3:0] saved_wstrb = 4'd0;
     integer i;
     integer cycles = 0;
+    integer file_handle, line_chars, rom_word_count;
+    reg [8*256-1:0] line_buffer;
     reg finished = 1'b0;
     reg [8*256-1:0] rom_file;
 
@@ -123,8 +125,20 @@ module tb_riscv_elf;
                 rvalid <= 1'b0;
 
             if (trap_valid) begin
-                $display("FAIL: core reported trap pc=%08x cause=%08x", trap_pc, trap_cause);
-                $fatal(1);
+                // riscv-tests uses the standard machine-mode ecall exit ABI:
+                // a7=93 and a0=0 means pass; a nonzero a0 is a test failure.
+                if ((trap_cause == 32'd11) && (dut.rf[17] == 32'd93)) begin
+                    if (dut.rf[10] == 32'd0) begin
+                        $display("PASS: public RISC-V test exited successfully after %0d cycles.", cycles);
+                        finished <= 1'b1;
+                    end else begin
+                        $display("FAIL: public RISC-V test exit code=%0d pc=%08x", dut.rf[10], trap_pc);
+                        $fatal(1);
+                    end
+                end else begin
+                    $display("FAIL: unexpected core trap pc=%08x cause=%08x", trap_pc, trap_cause);
+                    $fatal(1);
+                end
             end
         end
     end
@@ -139,6 +153,24 @@ module tb_riscv_elf;
             $fatal(1);
         end
         $readmemh(rom_file, rom);
+
+        // Mirror the loaded flat image into data memory as well. Count the
+        // actual hex words first so zero-initialized BSS remains zero.
+        file_handle = $fopen(rom_file, "r");
+        if (file_handle == 0) begin
+            $display("FAIL: cannot open ROM image %0s", rom_file);
+            $fatal(1);
+        end
+        rom_word_count = 0;
+        while (!$feof(file_handle)) begin
+            line_chars = $fgets(line_buffer, file_handle);
+            if (line_chars > 0)
+                rom_word_count = rom_word_count + 1;
+        end
+        $fclose(file_handle);
+        for (i = 0; (i < rom_word_count) && (i < WORDS); i = i + 1)
+            dmem[i] = rom[i];
+
         repeat (5) @(posedge clk);
         resetb = 1'b1;
         wait (finished);
