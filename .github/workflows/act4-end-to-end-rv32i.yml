@@ -94,7 +94,7 @@ jobs:
             python3 - "$bin" "$hex" <<'PY'
           import pathlib, struct, sys
           src = pathlib.Path(sys.argv[1]).read_bytes()
-          src += b"\x13\x00\x00\x00" * ((-len(src)) % 4 // 4)
+          src += b"\x13\x00\x00\x00"[:(-len(src)) % 4]
           dst = pathlib.Path(sys.argv[2])
           with dst.open("w") as f:
               for off in range(0, len(src), 4):
