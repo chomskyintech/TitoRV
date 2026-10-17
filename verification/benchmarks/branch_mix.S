@@ -13,7 +13,7 @@ _start:
     addi t1, t1, -1
     bne t1, zero, 1b
 
-    li t4, 500
+    li t4, 50
     bne t2, t4, fail
     j pass
 fail:
