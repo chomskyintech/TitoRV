@@ -57,9 +57,9 @@ jobs:
             -v "$GITHUB_WORKSPACE/act4-work:/act4/work" \
             riscv-act4 bash -lc \
             'cd /act4 && CONFIG_FILES=config/cores/titorv/titorv-rv32i/test_config.yaml EXTENSIONS=I make -j2'
-          elf_dir="act4-work/titorv-rv32i/elfs"
-          test -d "$elf_dir"
-          count="$(find "$elf_dir" -maxdepth 1 -type f -name '*.elf' | wc -l)"
+          elf_root="act4-work/titorv-rv32i/elfs"
+          test -d "$elf_root"
+          count="$(find "$elf_root" -type f -name '*.elf' | wc -l)"
           echo "Generated ACT4 ELF count: $count"
           test "$count" -gt 0
           printf 'generated_elf_count=%s\n' "$count" >> "$GITHUB_STEP_SUMMARY"
@@ -79,13 +79,13 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          elf_dir="act4-work/titorv-rv32i/elfs"
+          elf_root="act4-work/titorv-rv32i/elfs"
           mkdir -p act4-results
           total=0
           passed=0
           failed=0
-          shopt -s nullglob
-          for elf in "$elf_dir"/*.elf; do
+          mapfile -d '' -t elfs < <(find "$elf_root" -type f -name '*.elf' -print0 | sort -z)
+          for elf in "${elfs[@]}"; do
             total=$((total + 1))
             name="$(basename "$elf" .elf)"
             bin="act4-results/$name.bin"
