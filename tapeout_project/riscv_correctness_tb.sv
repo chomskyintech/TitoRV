@@ -332,9 +332,11 @@ module tb_riscv_correctness #(
         rom[91] = 32'h0000000f; // FENCE: legal no-op in this in-order, single-outstanding core
         rom[92] = 32'h00000013; // NOP
         rom[93] = 32'h00000013; // NOP
-        rom[94] = 32'h00000013; // NOP
-        rom[95] = 32'h00942023; // sw x9, 0(x8): completion signature
-        rom[96] = illegal_encoding(ILLEGAL_CASE); // selected malformed instruction => illegal trap
+        rom[94] = 32'h40a6dd33; // sra x26, x13, x10 => -1 (arithmetic sign extension)
+        rom[95] = 32'h00dd1a63; // bne x26, x13, +20: fail if SRA did not sign-extend
+        rom[96] = 32'h0020cd33; // restore x26 = x1 ^ x2 for the final XOR check
+        rom[97] = 32'h00942023; // sw x9, 0(x8): completion signature
+        rom[98] = illegal_encoding(ILLEGAL_CASE); // selected malformed instruction => illegal trap
         rom[100] = 32'h0000006f; // failure loop (watchdog must fire)
 
         repeat (5) @(posedge clk);
@@ -393,7 +395,7 @@ module tb_riscv_correctness #(
                 dut.rf[31] !== 32'd5 ||
                 dut.rf[0] !== 32'd0 ||
                 trap_valid !== 1'b1 ||
-                trap_pc !== 32'd384 ||
+                trap_pc !== 32'd392 ||
                 trap_cause !== expected_trap_cause(ILLEGAL_CASE) ||
                 aw_handshake_count !== 7 ||
                 w_handshake_count !== 7 ||
