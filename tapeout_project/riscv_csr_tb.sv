@@ -57,7 +57,9 @@ module tb_riscv_csr;
         rom[9]  = csr_insn(12'h341, 5'd5, 3'b001, 5'd10); // csrrw x10,mepc,x5
         rom[10] = csr_insn(12'h342, 5'd5, 3'b001, 5'd11); // csrrw x11,mcause,x5
         rom[11] = csr_insn(12'h341, 5'd0, 3'b010, 5'd12); // csrrs x12,mepc,x0: read aligned MEPC
-        rom[12] = 32'h00100073; // EBREAK terminates test via current diagnostic trap
+        rom[12] = 32'h01300693; // addi x13,x0,19 (base=16, reserved MODE=3)
+        rom[13] = csr_insn(12'h305, 5'd13, 3'b001, 5'd14); // mtvec WARL write
+        rom[14] = 32'h00100073; // EBREAK terminates test via current diagnostic trap
         repeat (5) @(posedge clk);
         resetb = 1'b1;
 
@@ -71,14 +73,14 @@ module tb_riscv_csr;
             dut.rf[4] !== 32'd0 ||
             dut.rf[8] !== 32'd8 ||
             dut.rf[9] !== 32'd9 ||
-            dut.csr_mtvec !== 32'd8 ||
+            dut.csr_mtvec !== 32'd16 ||
             dut.rf[10] !== 32'd0 ||
-            dut.csr_mepc !== 32'd48 ||
+            dut.csr_mepc !== 32'd56 ||
             dut.rf[11] !== 32'd0 ||
             dut.rf[12] !== 32'd40 ||
             dut.csr_mcause !== 32'd3 ||
             dut.trap_cause !== 32'd3 ||
-            dut.trap_pc !== 32'd48) begin
+            dut.trap_pc !== 32'd56) begin
             $display("FAIL: CSR access mismatch");
             $display("x1=%h x2=%h x3=%h x4=%h x6=%h x8=%h x9=%h", dut.rf[1],dut.rf[2],dut.rf[3],dut.rf[4],dut.rf[6],dut.rf[8],dut.rf[9]);
             $display("mscratch=%h mtvec=%h mepc=%h mcause=%h trap_pc=%h cause=%h", dut.csr_mscratch,dut.csr_mtvec,dut.csr_mepc,dut.csr_mcause,trap_pc,trap_cause);
