@@ -34,7 +34,8 @@ jobs:
           set -euo pipefail
           mkdir -p benchmark-results
           printf 'benchmark,metrics\n' > benchmark-results/summary.csv
-          for name in alu_dependency branch_mix memory_roundtrip controlflow_mem_widths; do
+          python3 verification/generate_alu_differential.py 20261017 verification/benchmarks/alu_randomized.S
+          for name in alu_dependency branch_mix memory_roundtrip controlflow_mem_widths alu_randomized; do
             elf="/tmp/titorv-${name}.elf"
             bin="/tmp/titorv-${name}.bin"
             hex="/tmp/titorv-${name}.hex"
