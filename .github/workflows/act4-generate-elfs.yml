@@ -35,13 +35,22 @@ jobs:
           working_directory: .tools/riscv-arch-test
           version: 2026.9.13
       - name: Install Sail 0.16 reference model
+        shell: bash
         run: |
+          set -euo pipefail
           mkdir -p "$HOME/riscv-sail"
           curl --fail --location --silent --show-error \
             https://github.com/riscv/sail-riscv/releases/download/0.16/sail-riscv-Linux-x86_64.tar.gz \
             | tar xz --directory "$HOME/riscv-sail" --strip-components=1
-          echo "$HOME/riscv-sail/bin" >> "$GITHUB_PATH"
-          sail_riscv_sim --version
+          sail_binary=$(find "$HOME/riscv-sail" -type f -name sail_riscv_sim -print -quit)
+          if [[ -z "$sail_binary" ]]; then
+            echo "Could not find sail_riscv_sim in the extracted Sail release."
+            find "$HOME/riscv-sail" -maxdepth 4 -type f -print
+            exit 1
+          fi
+          chmod +x "$sail_binary"
+          echo "$(dirname "$sail_binary")" >> "$GITHUB_PATH"
+          "$sail_binary" --version
       - name: Install TitoRV ACT4 configuration
         run: |
           mkdir -p .tools/riscv-arch-test/config/cores/chomskyintech/titorv-rv32i
