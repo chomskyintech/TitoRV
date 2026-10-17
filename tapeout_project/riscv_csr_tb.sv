@@ -72,9 +72,9 @@ module tb_riscv_csr;
             dut.rf[9] !== 32'd9 ||
             dut.csr_mtvec !== 32'd8 ||
             dut.rf[10] !== 32'd0 ||
-            dut.csr_mepc !== 32'd42 ||
+            dut.csr_mepc !== 32'd44 ||
             dut.rf[11] !== 32'd0 ||
-            dut.csr_mcause !== 32'd42 ||
+            dut.csr_mcause !== 32'd3 ||
             dut.trap_cause !== 32'd3 ||
             dut.trap_pc !== 32'd44) begin
             $display("FAIL: CSR access mismatch");
