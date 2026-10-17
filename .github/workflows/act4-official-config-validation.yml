@@ -16,30 +16,32 @@ jobs:
   udb-config:
     name: Official UDB configuration load
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 25
     steps:
       - uses: actions/checkout@v4
-      - uses: ruby/setup-ruby@v1
-        with:
-          ruby-version: "3.2"
-          bundler-cache: false
       - name: Check out RISC-V Unified Database
         uses: actions/checkout@v4
         with:
           repository: riscv/riscv-unified-db
           path: .tools/riscv-unified-db
-      - name: Install UDB dependencies
+      - name: Set up UDB toolchain and native dependencies
+        uses: jdx/mise-action@c2a87611a18de5b3828c5652fe268e992400cb5c
+        with:
+          working_directory: .tools/riscv-unified-db
+          version: 2026.9.13
+      - name: Install UDB dependencies without the ISS toolchain
         working-directory: .tools/riscv-unified-db
+        env:
+          UDB_TOOLCHAIN_NONE: "1"
         run: |
-          bundle config set path vendor/bundle
-          bundle install
+          echo "UDB_TOOLCHAIN_NONE=1" > .toolchain-local
+          ./bin/setup
       - name: Load TitoRV config using official UDB CLI
         working-directory: .tools/riscv-unified-db
         env:
           UDB_ROOT: ${{ github.workspace }}/.tools/riscv-unified-db
         run: |
-          bundle exec udb list extensions --config "${{ github.workspace }}/verification/act4/titorv-rv32i.yaml"
-
+          ./bin/udb list extensions --config "${{ github.workspace }}/verification/act4/titorv-rv32i.yaml"
   sail-config:
     name: Sail 0.16 configuration schema
     runs-on: ubuntu-latest
