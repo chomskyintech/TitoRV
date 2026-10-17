@@ -44,7 +44,12 @@ jobs:
         run: vvp /tmp/titorv-elf-smoke.vvp +ROM=/tmp/titorv-elf-smoke.hex
 
       - name: Fetch public RISC-V ISA tests
-        run: git clone --depth 1 --recurse-submodules https://github.com/riscv-software-src/riscv-tests.git /tmp/riscv-tests
+        run: |
+          git init /tmp/riscv-tests
+          git -C /tmp/riscv-tests remote add origin https://github.com/riscv-software-src/riscv-tests.git
+          git -C /tmp/riscv-tests fetch --depth 1 origin d7e86f701b929b5d801f8cda1a4871ab05f452bb
+          git -C /tmp/riscv-tests checkout --detach d7e86f701b929b5d801f8cda1a4871ab05f452bb
+          git -C /tmp/riscv-tests submodule update --init --recursive --depth 1
 
       - name: Build public RV32UI instruction tests
         run: |
