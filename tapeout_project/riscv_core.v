@@ -847,7 +847,7 @@ begin
                             CSR_MSCRATCH:
                                 csr_mscratch <= csr_write_data;
                             CSR_MEPC:
-                                csr_mepc <= {csr_write_data[31:1], 1'b0};
+                                csr_mepc <= {csr_write_data[31:2], 2'b00};
                             CSR_MCAUSE:
                                 csr_mcause <= csr_write_data;
                             default: begin end
