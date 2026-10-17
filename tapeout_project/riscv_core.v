@@ -715,7 +715,7 @@ begin
     else if(ex_valid && system_mret)
     begin
         // MRET restores the interrupt-enable stack and resumes at mepc.
-        csr_mstatus <= (csr_mstatus & ~32'h0000_1888) |
+        csr_mstatus <= (csr_mstatus & ~32'h0000_0088) |
                        ((csr_mstatus & 32'h0000_0080) >> 4) |
                        32'h0000_0080;
         pc <= {csr_mepc[31:2], 2'b00};
