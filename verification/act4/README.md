@@ -11,6 +11,10 @@ This directory starts the integration with the official [RISC-V Architectural Ce
 - Implemented machine CSRs currently documented by TitoRV: `mstatus`, `mtvec`, `mscratch`, `mepc`, `mcause`
 - Termination: write word `1` to `0x20000000` for pass; any other token at that address is failure in `tb_riscv_elf`
 
+## Configuration basis
+
+See [`titorv-rv32i-scope.md`](./titorv-rv32i-scope.md) for the RTL-derived instruction/CSR scope and limitations that must drive the ACT4 configuration. In particular, do not enable privileged or CSR tests just because the core has a partial machine-mode CSR bank; the implementation does not provide the full standard machine CSR/interrupt environment.
+
 ## Files
 
 - `link.ld`: ACT4-style linker script targeting the zero-based 64 KiB test memory.
@@ -22,7 +26,7 @@ The ELF CI workflow now builds both smoke ELFs and checks that the harness accep
 ## Remaining work before ACT4 can be run
 
 1. Create `titorv-rv32i.yaml` as a **fully configured UDB architecture configuration** containing only extensions and parameters supported by TitoRV. Do not copy a broad profile such as RV32GC/RVA profiles.
-2. Add and validate `sail.json`, `rvtest_config.h`, and `rvtest_config.svh` for RV32I and the limited machine-mode implementation.
+2. Create and validate a matching Sail 0.16 configuration; ACT4 generates `rvtest_config.h` and `rvtest_config.svh` from a valid UDB configuration during setup, so those generated outputs should be checked rather than hand-authored.
 3. Add an ACT4 `test_config.yaml` and install the framework's supported toolchain, UDB dependencies, and Sail 0.16 reference model in CI.
 4. Extend the harness for ACT4-generated ELFs as needed, including timeout/unexpected-trap diagnostics and per-test result capture; the current smoke test validates only pass/fail termination tokens.
 5. Start with unprivileged RV32I tests. Enable privileged tests only after the UDB and Sail configurations accurately describe TitoRV's limited trap/CSR implementation.
