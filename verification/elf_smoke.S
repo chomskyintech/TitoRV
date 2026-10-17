@@ -36,6 +36,12 @@ _start:
     bne   s2, zero, fail_arith
 
     # Register-register ALU operations.
+    add   s2, s0, s1
+    addi  t0, zero, 0x64
+    bne   s2, t0, fail_arith
+    sub   s2, s0, s1
+    addi  t0, zero, 0x46
+    bne   s2, t0, fail_arith
     xor   s2, s0, s1
     addi  t0, zero, 0x5a
     bne   s2, t0, fail_arith
