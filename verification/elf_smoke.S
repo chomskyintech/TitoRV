@@ -11,6 +11,10 @@ _start:
     addi  t5, t5, -1
     bne   t2, t5, fail_arith
 
+    # Writes targeting x0 must be discarded.
+    addi  zero, zero, 123
+    bne   zero, zero, fail_arith
+
     addi  s0, zero, 0x55
     addi  s1, zero, 0x0f
     andi  s2, s0, 0x0f
