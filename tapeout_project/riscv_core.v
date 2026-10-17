@@ -842,8 +842,15 @@ begin
                             CSR_MSTATUS:
                                 // Implemented machine status fields: MIE, MPIE, MPP.
                                 csr_mstatus <= csr_write_data & 32'h0000_1888;
-                            CSR_MTVEC:
-                                csr_mtvec <= csr_write_data;
+                            CSR_MTVEC: begin
+                                // mtvec.BASE is four-byte aligned. MODE 0
+                                // (direct) and MODE 1 (vectored) are the
+                                // defined encodings; reserved modes read back
+                                // as direct mode (a permitted WARL choice).
+                                csr_mtvec <= {csr_write_data[31:2],
+                                              1'b0,
+                                              (csr_write_data[1:0] == 2'b01)};
+                            end
                             CSR_MSCRATCH:
                                 csr_mscratch <= csr_write_data;
                             CSR_MEPC:
