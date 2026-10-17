@@ -355,7 +355,15 @@ begin
                     3'b010: alu_out = ($signed(rs1_data) < $signed(rs2_data)) ? 32'd1 : 32'd0;
                     3'b011: alu_out = (rs1_data < rs2_data) ? 32'd1 : 32'd0;
                     3'b100: alu_out = rs1_data ^ rs2_data;
-                    3'b101: alu_out = (funct7 == 7'b0100000) ? $signed(rs1_data) >>> rs2_data[4:0] : rs1_data >> rs2_data[4:0];
+                    3'b101: begin
+                        // Keep arithmetic and logical right shifts in separate
+                        // branches so the conditional operator cannot coerce the
+                        // signed shift result to an unsigned expression.
+                        if (funct7 == 7'b0100000)
+                            alu_out = $signed(rs1_data) >>> rs2_data[4:0];
+                        else
+                            alu_out = rs1_data >> rs2_data[4:0];
+                    end
                     3'b110: alu_out = rs1_data | rs2_data;
                     3'b111: alu_out = rs1_data & rs2_data;
                     default: alu_out = 32'd0;
