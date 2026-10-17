@@ -64,6 +64,61 @@ jobs:
           test "$count" -gt 0
           printf 'generated_elf_count=%s\n' "$count" >> "$GITHUB_STEP_SUMMARY"
 
+      - name: Audit generated RV32I test inventory
+        shell: bash
+        run: |
+          set -euo pipefail
+          elf_root="act4-work/titorv-rv32i/elfs"
+          expected="$(mktemp)"
+          actual="$(mktemp)"
+          trap 'rm -f "$expected" "$actual"' EXIT
+          cat > "$expected" <<'EOF'
+I-add-00
+I-addi-00
+I-and-00
+I-andi-00
+I-auipc-00
+I-beq-00
+I-bge-00
+I-bgeu-00
+I-blt-00
+I-bltu-00
+I-bne-00
+I-fence-00
+I-jal-00
+I-jalr-00
+I-lb-00
+I-lbu-00
+I-lh-00
+I-lhu-00
+I-lui-00
+I-lw-00
+I-nop-00
+I-or-00
+I-ori-00
+I-sb-00
+I-sh-00
+I-sll-00
+I-slli-00
+I-slt-00
+I-slti-00
+I-sltiu-00
+I-sltu-00
+I-sra-00
+I-srai-00
+I-srl-00
+I-srli-00
+I-sub-00
+I-sw-00
+I-xor-00
+I-xori-00
+EOF
+          find "$elf_root" -type f -name '*.elf' -printf '%f\n' | sed 's/\.elf$//' | sort > "$actual"
+          diff -u "$expected" "$actual"
+          count="$(wc -l < "$actual")"
+          echo "Verified exact expected RV32I test inventory: $count ELFs"
+          echo "- Expected test inventory: **$count/$count matched**" >> "$GITHUB_STEP_SUMMARY"
+
       - name: Install RTL simulation tools
         run: |
           sudo apt-get update
