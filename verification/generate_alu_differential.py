@@ -17,6 +17,7 @@ OPS = [
     "sll", "srl", "sra", "addi", "andi", "ori", "xori",
     "slti", "sltiu", "slli", "srli", "srai",
 ]
+IMM_OPS = {"addi", "andi", "ori", "xori", "slti", "sltiu", "slli", "srli", "srai"}
 
 
 def signed(value: int) -> int:
@@ -47,7 +48,7 @@ def main() -> None:
         rd = rng.choice(REGS)
         rs1 = rng.choice(REGS + [0])
         a = regs.get(rs1, 0)
-        if op.endswith("i") or op in ("slli", "srli", "srai"):
+        if op in IMM_OPS:
             imm = rng.randint(0, 31) if op in ("slli", "srli", "srai") else rng.randint(-2048, 2047)
             lines.append(f"    {op} x{rd}, x{rs1}, {imm}")
             if op == "addi":
