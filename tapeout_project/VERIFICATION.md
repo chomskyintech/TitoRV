@@ -1,48 +1,34 @@
-# TitoRV correctness smoke test
+# TitoRV verification status
 
-This is a standalone directed simulation test for the RTL currently under
-`tapeout_project/riscv_core.v`. It does not replace the existing UVM/AXI tests
-and does not claim full RISC-V ISA compliance.
+This document describes the standalone directed regressions for `tapeout_project/riscv_core.v`. These simulations supplement the existing AXI/UVM work; they do not establish full RV32I or privileged-architecture compliance.
 
-## What it checks
+## Automated CI regressions
 
-- `ADDI`, `ADD`, `SUB`, and `LUI` results
-- `x0` remains zero
-- A word store and a word load through the core's AXI-Lite master
-- Read-after-write consistency for the tested memory word
-- A completion signature, automatic pass/fail checks, and a timeout
+The `TitoRV directed correctness` GitHub Actions workflow currently runs:
 
-The current `tapeout_project/riscv_core.v` decoder is only a subset of RV32I.
-It does not currently implement the full base ISA, CSRs, or architectural
-exception/interrupt handling. The first run's trace showed the first ROM
-instruction being executed twice because the registered `instr_addr` and the
-pipeline's instruction capture are misaligned for the combinational instruction
-memory interface. The test starts with `addi x1, x1, 5` so duplicate execution
-changes x1 from 5 to 10 and should be reported as a failure.
+- Nine directed illegal-encoding/system-exception cases.
+- A machine CSR regression covering register/immediate forms of `CSRRW`, `CSRRS`, and `CSRRC`, plus selected WARL/readback behaviour.
+- Three machine trap-entry/`MRET` cases: `EBREAK`, `ECALL`, and illegal instruction.
+- Three control-flow wrong-path squash cases for branch, jump, and return paths.
 
-## Run in Vivado/XSim
+The workflow compiles with Icarus Verilog and treats mismatches/timeouts as failures. See the testbenches `riscv_correctness_tb.sv`, `riscv_csr_tb.sv`, `riscv_trap_tb.sv`, and `riscv_controlflow_tb.sv`.
 
-1. Add `tapeout_project/riscv_core.v` and `tapeout_project/riscv_correctness_tb.sv`
-   to a simulation sourceset.
-2. Set `tb_riscv_correctness` as the simulation top.
-3. Run behavioral simulation.
-4. A successful run ends with `PASS: directed instruction, register, load/store,
-   and x0 checks passed.` A timeout or mismatch calls `$fatal`.
+The separate ELF smoke workflow builds and runs 37 public RV32UI instruction tests from `riscv-software-src/riscv-tests`, pinned to upstream revision `d7e86f701b929b5d801f8cda1a4871ab05f452bb`. The tests cover selected cases for integer arithmetic/logical instructions, branches/jumps, and byte/halfword/word loads and stores. They use a minimal test-environment adapter and an ecall exit convention; this is not the official ACT4 test environment or pass/fail protocol.
 
-The testbench has its own instruction ROM and AXI-Lite memory model. Do not add
-`tapeout_project/instr_mem.v`, `design.sv`, or the existing UVM `testbench.sv`
-to this standalone simulation unless you intentionally adapt the testbench.
+## Latest verified run
 
-## Next steps toward architectural certification
+On commit `ce71f08e8fb6726f68a22c6ac2fc58ad6646b19d`, the following GitHub Actions runs completed successfully:
 
-1. Expand directed tests to cover every instruction and edge case that the
-   RTL actually implements.
-2. Fix unsupported or incorrect ISA behavior before claiming the corresponding
-   extension.
-3. Add a DUT configuration, linker script, and model macros for the RISC-V
-   Architectural Certification Tests (ACT4): https://github.com/riscv/riscv-arch-test
-4. Integrate an ELF loader or ELF-to-hex flow and a signature/termination
-   mechanism so the ACT4-generated self-checking ELFs can run on this DUT.
+- [Directed correctness #158](https://github.com/chomskyintech/TitoRV/actions/runs/38987230232) — includes the machine CSR, trap/`MRET`, and control-flow regressions.
+- [ELF execution harness #42](https://github.com/chomskyintech/TitoRV/actions/runs/38987230251) — includes the 37 public RV32UI tests.
+- [RV32I baseline smoke #36](https://github.com/chomskyintech/TitoRV/actions/runs/38987230214).
 
-ACT4 tests are run on the user's own testbench; they do not provide a complete
-microarchitectural verification environment by themselves.
+These results demonstrate that the checked regressions pass on that commit. They do not demonstrate complete RV32I compliance, full privileged-specification behaviour, or ACT4 certification.
+
+## Next verification steps
+
+1. Expand directed edge-case tests for ALU signedness and immediate boundaries, memory byte lanes, misaligned accesses, AXI response errors/backpressure, and instruction hazards.
+2. Integrate the RISC-V Architectural Certification Tests (ACT4) with a suitable DUT configuration, linker/model configuration, signature capture, and official termination protocol: https://github.com/riscv/riscv-arch-test
+3. Run the applicable certification tests and resolve failures before making any compliance claim.
+
+ACT4 tests execute on the user's testbench and do not replace microarchitectural verification.
