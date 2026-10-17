@@ -320,32 +320,22 @@
     // the `misaligned` PMA attribute for a region, see the comments for
     // `memory.misaligned.exceptions` above.
     "regions": [
-      // ROM
+      // TitoRV's 64 KiB zero-based executable/data memory.
       {
-        "base": {
-          "len": 64,
-          "value": "0x1000"
-        },
-        "size": {
-          "len": 64,
-          "value": "0x1000"
-        },
+        "base": { "len": 64, "value": "0x0" },
+        "size": { "len": 64, "value": "0x10000" },
         "attributes": {
-          "mem_type": "IOMemory",
+          "mem_type": "MainMemory",
           "cacheable": true,
-          "coherent": false,
-          "executable": false,
+          "coherent": true,
+          "executable": true,
           "readable": true,
-          "writable": false,
+          "writable": true,
           "read_idempotent": true,
           "write_idempotent": true,
           "misaligned_exceptions": {
-            "load_store": {
-              "None": null
-            },
-            "vector": {
-              "None": null
-            },
+            "load_store": { "None": null },
+            "vector": { "None": null },
             "amo": "AccessFault",
             "lrsc": "AccessFault"
           },
@@ -359,16 +349,10 @@
         },
         "include_in_device_tree": false
       },
-      // MMIO
+      // Completion-token MMIO used by the TitoRV simulation harness.
       {
-        "base": {
-          "len": 64,
-          "value": "0x2000000"
-        },
-        "size": {
-          "len": 64,
-          "value": "0x10000000"
-        },
+        "base": { "len": 64, "value": "0x20000000" },
+        "size": { "len": 64, "value": "0x1000" },
         "attributes": {
           "mem_type": "IOMemory",
           "cacheable": false,
@@ -380,9 +364,7 @@
           "write_idempotent": false,
           "misaligned_exceptions": {
             "load_store": { "Some": "AlignmentException" },
-            "vector": {
-              "Some": "AlignmentException"
-            },
+            "vector": { "Some": "AlignmentException" },
             "amo": "AccessFault",
             "lrsc": "AccessFault"
           },
@@ -395,45 +377,6 @@
           "supports_pte_write": false
         },
         "include_in_device_tree": false
-      },
-      // RAM
-      {
-        "base": {
-          "len": 64,
-          "value": "0x80000000"
-        },
-        "size": {
-          "len": 64,
-          "value": "0x80000000"
-        },
-        "attributes": {
-          "mem_type": "MainMemory",
-          "cacheable": true,
-          "coherent": true,
-          "executable": true,
-          "readable": true,
-          "writable": true,
-          "read_idempotent": true,
-          "write_idempotent": true,
-          "misaligned_exceptions": {
-            "load_store": {
-              "None": null
-            },
-            "vector": {
-              "None": null
-            },
-            "amo": "AccessFault",
-            "lrsc": "AccessFault"
-          },
-          "atomic_support": "AMOArithmetic",
-          "misaligned_atomicity_granule_size_exp": 0,
-          "vector_misaligned_atomicity_granule_size_exp": 0,
-          "reservability": "RsrvEventual",
-          "supports_cbo_zero": true,
-          "supports_pte_read": true,
-          "supports_pte_write": true
-        },
-        "include_in_device_tree": true
       }
     ]
   },
