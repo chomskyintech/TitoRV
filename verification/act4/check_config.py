@@ -49,6 +49,16 @@ require(params.get("MTVEC_MODES") == [0], "only direct mtvec mode is configured"
 require(sail.get("$schema", "").endswith("/0.16/sail_riscv_config_schema.json"), "Sail config must target schema version 0.16")
 require(sail.get("base", {}).get("xlen") == 32, "Sail XLEN must be 32")
 require(sail.get("base", {}).get("E") is False, "Sail E profile must be disabled for RV32I")
+sail_base = sail.get("base", {})
+require(sail_base.get("mcountinhibit", {}).get("supported") is False, "Sail must not model mcountinhibit as implemented")
+require(sail_base.get("writable_hpm_counters", {}).get("value") == "0x0", "Sail must not enable HPM counters")
+require(sail_base.get("mtvec", {}).get("direct", {}).get("supported") is True, "Sail must support direct mtvec mode")
+require(sail_base.get("mtvec", {}).get("vectored", {}).get("supported") is False, "Sail must not enable vectored mtvec dispatch")
+memory_regions = sail.get("memory", {}).get("regions", [])
+require(any(region.get("base") == "0x00000000" and region.get("size") == "0x00010000" for region in memory_regions),
+        "Sail RAM must match TitoRV's 64 KiB zero-based test memory")
+require(any(region.get("base") == "0x20000000" and region.get("size") == "0x00001000" for region in memory_regions),
+        "Sail completion MMIO must match the harness at 0x20000000")
 for filename in ("link.ld", "rvmodel_macros.h", "termination_smoke.S"):
     require((root / filename).is_file(), f"missing required adapter file: {filename}")
 
