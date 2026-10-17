@@ -34,6 +34,8 @@ def main() -> None:
             b = a
         r1, r2 = 1 + (i % 16), 1 + ((i * 7 + 3) % 16)
         regs[r1], regs[r2] = a, b
+        lines.append(f"    li x{r1}, {s32(a)}")
+        lines.append(f"    li x{r2}, {s32(b)}")
         if op == "beq": truth = a == b
         elif op == "bne": truth = a != b
         elif op == "blt": truth = s32(a) < s32(b)
