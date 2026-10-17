@@ -52,10 +52,11 @@ _start:
     srl   s2, s2, t0
     addi  t0, zero, 15
     bne   s2, t0, fail_arith
-    slt   s2, t3, t4
+    addi  t5, zero, 1
+    slt   s2, t3, t5
     addi  t0, zero, 1
     bne   s2, t0, fail_arith
-    sltu  s2, t3, t4
+    sltu  s2, t3, t5
     bne   s2, zero, fail_arith
 
     # Exercise all six conditional branches, taken and not taken.
@@ -68,23 +69,23 @@ beq_taken:
 bne_taken:
     beq   s0, s1, fail_branch
 
-    blt   t3, t4, blt_taken
+    blt   t3, t5, blt_taken
     j     fail_branch
 blt_taken:
-    blt   t4, t3, fail_branch
-    bge   t4, t3, bge_taken
+    blt   t5, t3, fail_branch
+    bge   t5, t3, bge_taken
     j     fail_branch
 bge_taken:
-    bge   t3, t4, fail_branch
+    bge   t3, t5, fail_branch
 
-    bltu  t4, t3, bltu_taken
+    bltu  t5, t3, bltu_taken
     j     fail_branch
 bltu_taken:
-    bltu  t3, t4, fail_branch
-    bgeu  t3, t4, bgeu_taken
+    bltu  t3, t5, fail_branch
+    bgeu  t3, t5, bgeu_taken
     j     fail_branch
 bgeu_taken:
-    bgeu  t4, t3, fail_branch
+    bgeu  t5, t3, fail_branch
 
     # Word, byte, and halfword accesses through the AXI-Lite interface.
     addi  t0, zero, 256
