@@ -6,7 +6,8 @@
 // 1 to 0x20000000 is the harness-specific PASS convention; this is not yet
 // the official RISC-V ACT4 RVMODEL_HALT_PASS protocol.
 module tb_riscv_elf;
-    localparam integer WORDS = 16384;
+    // AXI-backed simulation RAM; 128 KiB accommodates official ACT4 signature tests.
+    localparam integer WORDS = 32768;
     localparam [31:0] PASS_ADDR = 32'h20000000;
 
     reg clk = 1'b0;
@@ -50,7 +51,7 @@ module tb_riscv_elf;
     );
 
     always @* begin
-        if ((instr_addr[31:16] == 16'd0) && (instr_addr[15:2] < WORDS))
+        if ((instr_addr[31:17] == 15'd0) && (instr_addr[16:2] < WORDS))
             instr_rdata = rom[instr_addr[15:2]];
         else
             instr_rdata = 32'h00000013; // ADDI x0,x0,0
@@ -108,7 +109,7 @@ module tb_riscv_elf;
                 end else begin
                     for (lane = 0; lane < 4; lane = lane + 1)
                         if (commit_strb[lane])
-                            dmem[commit_addr[15:2]][lane*8 +: 8] <= commit_data[lane*8 +: 8];
+                            dmem[commit_addr[16:2]][lane*8 +: 8] <= commit_data[lane*8 +: 8];
                 end
                 aw_seen <= 1'b0;
                 w_seen <= 1'b0;
@@ -118,7 +119,7 @@ module tb_riscv_elf;
                 bvalid <= 1'b0;
 
             if (arvalid && arready && !rvalid) begin
-                rdata <= dmem[araddr[15:2]];
+                rdata <= dmem[araddr[16:2]];
                 rvalid <= 1'b1;
             end
             if (rvalid && rready)
