@@ -50,3 +50,15 @@ jobs:
               tapeout_project/riscv_core.v tapeout_project/riscv_trap_tb.sv
             vvp /tmp/titorv-trap-test-${trap_case}
           done
+
+      - name: Compile and run control-flow wrong-path squash regression
+        run: |
+          set -e
+          for flow_case in 0 1 2; do
+            echo "=== Control-flow regression case ${flow_case} ==="
+            iverilog -g2012 -Wall -s tb_riscv_controlflow \
+              -Ptb_riscv_controlflow.FLOW_CASE=${flow_case} \
+              -o /tmp/titorv-controlflow-test-${flow_case} \
+              tapeout_project/riscv_core.v tapeout_project/riscv_controlflow_tb.sv
+            vvp /tmp/titorv-controlflow-test-${flow_case}
+          done
