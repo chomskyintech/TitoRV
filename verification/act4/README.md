@@ -1,6 +1,6 @@
 # ACT4 integration scaffold for TitoRV
 
-This directory starts the integration with the official [RISC-V Architectural Certification Tests (ACT4)](https://github.com/riscv/riscv-arch-test). It is **not yet marked runnable or certified**. The UDB file remains a minimal candidate, while `sail.json` now uses the upstream ACT4 CVW RV32I configuration as a schema-complete starting point. Neither file is yet a validated model of TitoRV; official validation and a platform/CSR/trap audit are still required before generated output can be trusted.
+This directory starts the integration with the official [RISC-V Architectural Certification Tests (ACT4)](https://github.com/riscv/riscv-arch-test). It is **not yet marked runnable or certified**. The UDB file now includes the machine-mode parameters required by the official UDB loader, with privileged tests disabled. `sail.json` uses the upstream ACT4 CVW RV32I model as a schema-complete starting point, but its memory map has been changed to TitoRV's 64 KiB zero-based RAM and completion-token MMIO. Neither file is yet a validated behavioral model of TitoRV; official validation and a platform/CSR/trap audit are still required before generated output can be trusted.
 
 ## Target currently established
 
@@ -15,15 +15,15 @@ This directory starts the integration with the official [RISC-V Architectural Ce
 
 See [`titorv-rv32i-scope.md`](./titorv-rv32i-scope.md) for the RTL-derived instruction/CSR scope and limitations that must drive the ACT4 configuration.
 
-The initial UDB candidate declares only the base `I` extension and has not yet passed the official UDB loader. `test_config.yaml` disables privilege-mode tests. This is intended to keep the first test selection focused on unprivileged RV32I; it is **not** a claim that the RTL's extra SYSTEM/CSR behaviour is fully described by the config. The candidate UDB file has not yet been checked with the official UDB validator or ACT4 generator.
+The UDB candidate declares `I` plus `Sm` parameters because UDB requires the machine-mode parameter set even when the initial selected tests are unprivileged. This configuration does not establish privileged compliance; `test_config.yaml` keeps privileged tests disabled. `test_config.yaml` disables privilege-mode tests. This is intended to keep the first test selection focused on unprivileged RV32I; it is **not** a claim that the RTL's extra SYSTEM/CSR behaviour is fully described by the config. The candidate UDB file has not yet been checked with the official UDB validator or ACT4 generator.
 
 The inspected RTL implements only five CSRs, has no interrupt handling, and redirects synchronous traps directly even when `mtvec.MODE` is written as vectored. The official UDB configuration has global behaviour controls such as `TRAP_ON_UNIMPLEMENTED_CSR` and `MTVEC_MODES`; Sail has its own privilege/CSR model. Therefore the minimal Sail candidate must be checked against Sail 0.16 and the ACT4-generated test expectations before any certification-style run.
 
 ## Files
 
 - [`test_config.yaml`](./test_config.yaml): ACT4 framework settings; privileged tests disabled.
-- [`titorv-rv32i.yaml`](./titorv-rv32i.yaml): initial UDB candidate declaring RV32I only; not yet officially validated.
-- [`sail.json`](./sail.json): Sail 0.16 schema-complete starting point based on the upstream ACT4 CVW RV32I configuration; it still requires a TitoRV-specific platform/CSR/trap audit.
+- [`titorv-rv32i.yaml`](./titorv-rv32i.yaml): UDB test-generation candidate for unprivileged RV32I with required machine-mode configuration; official loader validation is pending.
+- [`sail.json`](./sail.json): Sail 0.16 schema-complete starting point with TitoRV RAM/MMIO addresses; still requires a TitoRV-specific CSR/trap/extension audit.
 - [`link.ld`](./link.ld): ACT4-style linker script targeting the zero-based 64 KiB test memory.
 - [`rvmodel_macros.h`](./rvmodel_macros.h): minimal pass/fail termination macros using the current harness completion convention.
 - [`termination_smoke.S`](./termination_smoke.S): assembly program used to exercise the pass/fail adapter.
