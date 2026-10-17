@@ -1,0 +1,133 @@
+name: TitoRV ACT4 RV32I generation and execution
+
+on:
+  push:
+    branches:
+      - act4-end-to-end-rv32i
+  pull_request:
+    branches:
+      - master
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  act4-rv32i:
+    name: Generate and execute ACT4 RV32I ELFs
+    runs-on: ubuntu-24.04
+    timeout-minutes: 180
+    steps:
+      - name: Check out TitoRV
+        uses: actions/checkout@v4
+
+      - name: Check out official ACT4 framework
+        uses: actions/checkout@v4
+        with:
+          repository: riscv/riscv-arch-test
+          ref: act4
+          path: .tools/act4
+
+      - name: Prepare TitoRV ACT4 configuration
+        run: |
+          set -euo pipefail
+          config_dir="$GITHUB_WORKSPACE/.tools/act4/config/cores/titorv/titorv-rv32i"
+          mkdir -p "$config_dir"
+          cp verification/act4/test_config.yaml \
+             verification/act4/titorv-rv32i.yaml \
+             verification/act4/sail.json \
+             verification/act4/link.ld \
+             verification/act4/rvmodel_macros.h \
+             verification/act4/rvtest_config.h \
+             verification/act4/rvtest_config.svh \
+             "$config_dir/"
+          # Keep the ACT4 image's output directory writable by the runner.
+          mkdir -p act4-work
+          chmod 777 act4-work
+
+      - name: Build official ACT4 toolchain image
+        run: docker build --tag riscv-act4 .tools/act4
+
+      - name: Generate self-checking RV32I ACT4 ELFs
+        run: |
+          set -euo pipefail
+          docker run --rm \
+            -v "$GITHUB_WORKSPACE/.tools/act4/config/cores/titorv/titorv-rv32i:/act4/config/cores/titorv/titorv-rv32i:ro" \
+            -v "$GITHUB_WORKSPACE/act4-work:/act4/work" \
+            riscv-act4 bash -lc \
+            'cd /act4 && CONFIG_FILES=config/cores/titorv/titorv-rv32i/test_config.yaml EXTENSIONS=I make -j2'
+          elf_dir="act4-work/titorv-rv32i/elfs"
+          test -d "$elf_dir"
+          count="$(find "$elf_dir" -maxdepth 1 -type f -name '*.elf' | wc -l)"
+          echo "Generated ACT4 ELF count: $count"
+          test "$count" -gt 0
+          printf 'generated_elf_count=%s\n' "$count" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Install RTL simulation tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes iverilog gcc-riscv64-unknown-elf
+
+      - name: Compile TitoRV ELF harness
+        run: |
+          iverilog -g2012 -Wall -s tb_riscv_elf \
+            -o /tmp/titorv-act4.vvp \
+            tapeout_project/riscv_core.v tapeout_project/riscv_elf_tb.sv
+
+      - name: Execute every generated ACT4 ELF on TitoRV
+        shell: bash
+        run: |
+          set -euo pipefail
+          elf_dir="act4-work/titorv-rv32i/elfs"
+          mkdir -p act4-results
+          total=0
+          passed=0
+          failed=0
+          shopt -s nullglob
+          for elf in "$elf_dir"/*.elf; do
+            total=$((total + 1))
+            name="$(basename "$elf" .elf)"
+            bin="act4-results/$name.bin"
+            hex="act4-results/$name.hex"
+            log="act4-results/$name.log"
+            riscv64-unknown-elf-objcopy -O binary "$elf" "$bin"
+            python3 - "$bin" "$hex" <<'PY'
+          import pathlib, struct, sys
+          src = pathlib.Path(sys.argv[1]).read_bytes()
+          src += b"\x13\x00\x00\x00" * ((-len(src)) % 4 // 4)
+          dst = pathlib.Path(sys.argv[2])
+          with dst.open("w") as f:
+              for off in range(0, len(src), 4):
+                  f.write(f"{struct.unpack_from('<I', src, off)[0]:08x}\n")
+          if len(src) > 256 * 1024:
+              raise SystemExit(f"ELF image exceeds TitoRV 256 KiB RAM: {len(src)} bytes")
+          PY
+            echo "[$total] Running $name"
+            if timeout 20s vvp /tmp/titorv-act4.vvp "+ROM=$hex" 2>&1 | tee "$log" \
+               && grep -q "PASS: ELF program wrote the PASS token" "$log"; then
+              passed=$((passed + 1))
+            else
+              failed=$((failed + 1))
+              echo "FAILED: $name" | tee -a act4-results/summary.txt
+            fi
+          done
+          printf 'Total: %s\nPassed: %s\nFailed: %s\n' "$total" "$passed" "$failed" | tee act4-results/summary.txt
+          {
+            echo "### ACT4 RV32I execution"
+            echo "- Generated ELFs: $total"
+            echo "- Passed on TitoRV: $passed"
+            echo "- Failed on TitoRV: $failed"
+          } >> "$GITHUB_STEP_SUMMARY"
+          test "$total" -gt 0
+          test "$failed" -eq 0
+
+      - name: Upload ACT4 generation and execution artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: titorv-act4-rv32i-results
+          path: |
+            act4-work/titorv-rv32i/
+            act4-results/
+          if-no-files-found: warn
+          retention-days: 14
