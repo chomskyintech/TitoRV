@@ -20,7 +20,17 @@ TitoRV is a 32-bit, in-order pipelined core with an instruction-memory interface
 | Loads | `LB`, `LH`, `LW`, `LBU`, `LHU` | Word round trip plus signed/unsigned byte and halfword loads |
 | Stores | `SB`, `SH`, `SW` | Word store/load and byte/halfword lane checks |
 
-The table records implemented paths and the intended regression coverage; it does not imply every immediate, boundary, hazard, or misalignment case has been tested.
+The table records implemented paths and regression coverage; it does not imply every immediate, boundary, hazard, or misalignment case has been tested.
+
+## Public RV32UI instruction regression
+
+The ELF CI workflow builds and runs 37 public instruction tests from [`riscv-software-src/riscv-tests`](https://github.com/riscv-software-src/riscv-tests), pinned to upstream revision `d7e86f701b929b5d801f8cda1a4871ab05f452bb`. The test sources are built as RV32I and linked into TitoRV's zero-based 64 KiB memory map. A minimal environment adapter avoids unrelated privileged-startup code; tests terminate through the standard `a7=93` / `a0=0` ecall exit convention.
+
+**Latest pinned CI run:** all 37 tests passed in workflow run [#40](https://github.com/chomskyintech/TitoRV/actions/runs/38987135936). The baseline smoke and directed-correctness workflows also passed on the same commit.
+
+Covered upstream tests: `add`, `addi`, `and`, `andi`, `auipc`, `beq`, `bge`, `bgeu`, `blt`, `bltu`, `bne`, `jal`, `jalr`, `lb`, `lbu`, `lh`, `lhu`, `lui`, `lw`, `or`, `ori`, `sb`, `sh`, `sll`, `slli`, `slt`, `slti`, `sltiu`, `sltu`, `sra`, `srai`, `srl`, `srli`, `sub`, `sw`, `xor`, and `xori`.
+
+These are public instruction-level unit tests, not ACT4 certification. They cover selected operand cases and depend on the same processor for the tests' self-checking branches and control flow.
 
 ## Additional system behaviour
 
@@ -33,7 +43,7 @@ These system features should not be confused with complete privileged-architectu
 
 ## Known gaps and limits
 
-- **No ACT4 result yet.** The ELF program is a custom self-checking smoke test using a store of `1` to `0x20000000` as its completion token. This is not the official `RVMODEL_HALT_PASS` protocol.
+- **No ACT4 result yet.** The custom smoke ELF uses a store of `1` to `0x20000000` as its completion token; public `riscv-tests` use a minimal ecall-exit adapter. Neither setup is the official ACT4 `RVMODEL_HALT_PASS` protocol.
 - **No exhaustive instruction proof.** The current tests use selected values and sequences; they do not exhaustively cover all opcode/funct combinations, immediate boundaries, signedness edges, or interactions between every instruction pair.
 - **Memory corner cases need work.** Misaligned accesses, all byte-lane combinations, response errors, and more varied AXI-Lite backpressure patterns are not comprehensively tested by the ELF harness.
 - **Exceptions and interrupts are incomplete.** The current trap path is limited and does not establish full privileged-specification behaviour, interrupt handling, or all architectural exception conditions.
