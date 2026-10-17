@@ -1,5 +1,5 @@
-\`timescale 1ns/1ps
-\`default_nettype none
+`timescale 1ns/1ps
+`default_nettype none
 
 module tb_riscv_trap;
     reg clk = 1'b0;
@@ -85,4 +85,4 @@ module tb_riscv_trap;
     end
 endmodule
 
-\`default_nettype wire
+`default_nettype wire
