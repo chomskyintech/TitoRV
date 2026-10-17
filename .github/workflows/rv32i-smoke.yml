@@ -1,0 +1,28 @@
+name: RV32I baseline smoke
+
+on:
+  push:
+    branches:
+      - master
+      - verification/riscv-directed-tests
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  rv32i-smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+      - name: Install Icarus Verilog
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y iverilog
+      - name: Compile baseline smoke test
+        run: |
+          iverilog -g2012 -Wall -s rv32i_smoke_tb \
+            -o /tmp/rv32i_smoke.vvp \
+            tapeout_project/riscv_core.v \
+            tapeout_project/rv32i_smoke_tb.v
+      - name: Run baseline smoke test
+        run: vvp /tmp/rv32i_smoke.vvp
