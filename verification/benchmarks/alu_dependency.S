@@ -2,14 +2,14 @@
 .globl _start
 _start:
     li t0, 0
-    li t1, 100
+    li t1, 1000
     li t2, 1
 1:
     add t0, t0, t2
     addi t1, t1, -1
     bne t1, zero, 1b
 
-    li t3, 100
+    li t3, 1000
     bne t0, t3, fail
     j pass
 fail:
