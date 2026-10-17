@@ -6,7 +6,7 @@ This file records the RTL facts that must drive the ACT4 UDB and Sail configurat
 
 - XLEN: 32 bits.
 - Reset PC / ELF load base: `0x00000000`.
-- Existing ELF harness memory: 16,384 32-bit words (64 KiB), zero-based instruction/data memory.
+- ELF simulation harness memory: 32,768 32-bit words (128 KiB), zero-based AXI-backed instruction/data memory. This is external simulation-platform capacity, not an on-core SRAM claim.
 - Single hart.
 - Harness termination: a 32-bit store to `0x20000000`; value `1` means pass and any other value is a failure.
 - Current ACT4 adapter smoke test checks only that termination convention.
