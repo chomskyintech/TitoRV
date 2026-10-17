@@ -71,7 +71,7 @@ module tb_riscv_trap #(parameter integer TRAP_CASE = 0);
             dut.rf[4] !== 32'd20 ||
             dut.csr_mstatus[3] !== 1'b1 ||
             dut.csr_mstatus[7] !== 1'b1 ||
-            dut.csr_mstatus[12:11] !== 2'b00) begin
+            dut.csr_mstatus[12:11] !== 2'b11) begin
             $display("FAIL: trap entry/MRET mismatch");
             $display("trap_pc=%h cause=%h mtvec=%h mepc=%h mcause=%h mstatus=%h x2=%h x3=%h x4=%h pc=%h",
                      trap_pc, trap_cause, dut.csr_mtvec, dut.csr_mepc,
