@@ -34,7 +34,7 @@ jobs:
           set -euo pipefail
           mkdir -p benchmark-results
           printf 'benchmark,metrics\n' > benchmark-results/summary.csv
-          for name in alu_dependency branch_mix memory_roundtrip; do
+          for name in alu_dependency branch_mix memory_roundtrip controlflow_mem_widths; do
             elf="/tmp/titorv-${name}.elf"
             bin="/tmp/titorv-${name}.bin"
             hex="/tmp/titorv-${name}.hex"
