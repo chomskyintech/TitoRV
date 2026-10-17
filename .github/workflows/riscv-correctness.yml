@@ -38,3 +38,10 @@ jobs:
             -o /tmp/titorv-csr-test \
             tapeout_project/riscv_core.v tapeout_project/riscv_csr_tb.sv
           vvp /tmp/titorv-csr-test
+
+      - name: Compile and run machine trap entry and MRET regression
+        run: |
+          iverilog -g2012 -Wall -s tb_riscv_trap \
+            -o /tmp/titorv-trap-test \
+            tapeout_project/riscv_core.v tapeout_project/riscv_trap_tb.sv
+          vvp /tmp/titorv-trap-test
