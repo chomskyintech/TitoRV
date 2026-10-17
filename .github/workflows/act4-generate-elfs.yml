@@ -111,6 +111,10 @@ jobs:
               mmio_region(0x02000000, 0x000C0000),  # generator-required CLINT map
               mmio_region(0x0C000000, 0x00000020),  # generator-required interrupt source
           ])
+          # Sail requires memory regions to be ordered by ascending base address.
+          # Appending the generator-only low-address MMIO regions caused validation
+          # to fail when Sail encountered them after the 0x20000000 region.
+          regions.sort(key=lambda region: int(region["base"]["value"], 0))
           path.write_text(json.dumps(config, indent=2) + "\n")
           print("Prepared temporary Sail config for ACT4 generation only.")
           print("Repository sail.json remains unchanged; CLINT/interrupt tests remain out of scope.")
