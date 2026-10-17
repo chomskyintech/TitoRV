@@ -84,8 +84,8 @@ reg [31:0] rf [31:0];
 
 reg [31:0] pc;
 
-// Machine-mode CSR bank. This step adds CSR access semantics; trap entry,
-// mstatus interrupt-stack updates, and MRET are implemented in later steps.
+// Machine-mode CSR bank. Implements the machine CSRs used by the current
+// machine-mode trap path; only MIE/MPIE/MPP are modelled in mstatus.
 reg [31:0] csr_mstatus;
 reg [31:0] csr_mtvec;
 reg [31:0] csr_mscratch;
@@ -241,6 +241,7 @@ wire valid_jalr = (opcode == OP_JALR) && (funct3 == 3'b000);
 // they are intentionally not mislabeled as illegal by this decoder.
 wire system_exception = (opcode == OP_SYSTEM) &&
     ((ex_insn == 32'h00000073) || (ex_insn == 32'h00100073));
+wire system_mret = (opcode == OP_SYSTEM) && (ex_insn == 32'h30200073);
 wire illegal_instruction =
     ((opcode == OP_ARITHI) && !valid_addi) ||
     ((opcode == OP_ARITHR) && !valid_arithr) ||
@@ -252,7 +253,7 @@ wire illegal_instruction =
       (opcode == OP_AUIPC) || (opcode == OP_BRANCH) || (opcode == OP_LOAD) ||
       (opcode == OP_STORE) || (opcode == OP_ARITHI) || (opcode == OP_ARITHR) ||
       (opcode == 7'b0001111) || (opcode == OP_SYSTEM)) ||
-    ((opcode == OP_SYSTEM) && !system_exception && !csr_instruction_valid);
+    ((opcode == OP_SYSTEM) && !system_exception && !system_mret && !csr_instruction_valid);
 
 // ============================================================
 // Register Reads
@@ -637,7 +638,7 @@ end
         // after the AXI transaction finishes.
         //
         // =====================================================
-if(!pipe_stall && !trap_valid)
+if(!pipe_stall)
 begin
 
     // ---------------------------------------------------------
@@ -672,6 +673,8 @@ begin
 
     if(ex_valid && (illegal_instruction || system_exception))
     begin
+        // Synchronous machine-mode trap entry. trap_* remains a sticky
+        // diagnostic output; execution itself continues at mtvec.
         trap_valid <= 1'b1;
         trap_pc <= ex_pc;
         if (ex_insn == 32'h00000073)
@@ -680,16 +683,49 @@ begin
             trap_cause <= 32'd3;  // breakpoint
         else
             trap_cause <= 32'd2;  // illegal instruction
-        pc <= ex_pc;
-        instr_addr <= ex_pc;
-        if_pc <= ex_pc;
-        ex_pc <= ex_pc;
+
+        csr_mepc <= {ex_pc[31:2], 2'b00};
+        if (ex_insn == 32'h00000073)
+            csr_mcause <= 32'd11;
+        else if (ex_insn == 32'h00100073)
+            csr_mcause <= 32'd3;
+        else
+            csr_mcause <= 32'd2;
+
+        // mstatus.MPIE <- mstatus.MIE; MIE <- 0; MPP <- M.
+        csr_mstatus <= (csr_mstatus & ~32'h0000_1888) |
+                       ((csr_mstatus & 32'h0000_0008) << 4) |
+                       32'h0000_1800;
+
+        // Synchronous exceptions always use the direct base, even when
+        // mtvec.MODE is set to vectored mode.
+        pc <= {csr_mtvec[31:2], 2'b00};
+        instr_addr <= {csr_mtvec[31:2], 2'b00};
+        if_pc <= {csr_mtvec[31:2], 2'b00};
         if_insn <= 32'h00000013;
+        ex_pc <= {csr_mtvec[31:2], 2'b00};
         ex_insn <= 32'h00000013;
         ex_valid <= 1'b0;
-        $display("TRAP: pc=%h insn=%h cause=%0d", ex_pc, ex_insn,
+        $display("TRAP ENTRY: pc=%h insn=%h cause=%0d mtvec=%h",
+                 ex_pc, ex_insn,
                  (ex_insn == 32'h00000073) ? 32'd11 :
-                 ((ex_insn == 32'h00100073) ? 32'd3 : 32'd2));
+                 ((ex_insn == 32'h00100073) ? 32'd3 : 32'd2),
+                 {csr_mtvec[31:2], 2'b00});
+    end
+    else if(ex_valid && system_mret)
+    begin
+        // MRET restores the interrupt-enable stack and resumes at mepc.
+        csr_mstatus <= (csr_mstatus & ~32'h0000_1888) |
+                       ((csr_mstatus & 32'h0000_0080) >> 4) |
+                       32'h0000_0080;
+        pc <= {csr_mepc[31:2], 2'b00};
+        instr_addr <= {csr_mepc[31:2], 2'b00};
+        if_pc <= {csr_mepc[31:2], 2'b00};
+        if_insn <= 32'h00000013;
+        ex_pc <= {csr_mepc[31:2], 2'b00};
+        ex_insn <= 32'h00000013;
+        ex_valid <= 1'b0;
+        $display("MRET: returning to %h", {csr_mepc[31:2], 2'b00});
     end
     else if(ex_valid)
     begin
