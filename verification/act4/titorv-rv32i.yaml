@@ -48,6 +48,7 @@ params:
   MISA_CSR_IMPLEMENTED: false
   MTVEC_ACCESS: rw
   MTVEC_MODES: [0]
+  MTVEC_BASE_ALIGNMENT_DIRECT: 0x4
   MTVEC_ILLEGAL_WRITE_BEHAVIOR: custom
   HPM_COUNTER_EN: [false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false]
   MCOUNTINHIBIT_IMPLEMENTED: false
