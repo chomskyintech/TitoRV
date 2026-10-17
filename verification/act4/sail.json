@@ -651,8 +651,10 @@
     "Zicclsm": {
       "supported": false
     },
+    // Ziccrse covers reservation-set behavior associated with LR/SC.
+    // TitoRV does not implement the A extension or LR/SC.
     "Ziccrse": {
-      "supported": true
+      "supported": false
     },
     "Zicfilp": {
       "supported": false
