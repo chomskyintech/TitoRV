@@ -48,7 +48,8 @@ _start:
     sll   s2, s1, t0
     addi  t0, zero, 0x1e0
     bne   s2, t0, fail_arith
-    srl   s2, s2, s1
+    addi  t0, zero, 5
+    srl   s2, s2, t0
     addi  t0, zero, 15
     bne   s2, t0, fail_arith
     slt   s2, t3, t4
