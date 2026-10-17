@@ -841,7 +841,7 @@ begin
                         case (csr_addr)
                             CSR_MSTATUS:
                                 // Implemented machine status fields: MIE, MPIE, MPP.
-                                csr_mstatus <= csr_write_data & 32'h0000_1888;
+                                // This core implements machine mode only, so MPP is WARL-hardwired\n                                // to M (11); U-mode is not implemented.\n                                csr_mstatus <= (csr_write_data & 32'h0000_0088) | 32'h0000_1800;
                             CSR_MTVEC: begin
                                 // mtvec.BASE is four-byte aligned. MODE 0
                                 // (direct) and MODE 1 (vectored) are the
