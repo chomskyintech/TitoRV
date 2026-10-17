@@ -80,8 +80,10 @@
         "supported": true,
         "base_alignment": 2
       },
+      // TitoRV always redirects synchronous traps to BASE; it does not
+      // implement vectored trap dispatch. Keep this disabled in the model.
       "vectored": {
-        "supported": true,
+        "supported": false,
         "base_alignment": 6
       }
     },
