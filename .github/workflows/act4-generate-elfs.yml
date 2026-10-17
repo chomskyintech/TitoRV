@@ -130,9 +130,10 @@ jobs:
           make
           # ACT4 versions may place generated ELF files under per-test build
           # directories rather than directly in the top-level elfs directory.
-          # Search the entire generated work tree and fail with diagnostics only
-          # if no ELF exists anywhere.
-          find work/titorv-rv32i -type f -name '*.elf' -print | sort > "$RUNNER_TEMP/act4-elf-list.txt"
+          # Run only the self-checking execution ELFs. The sibling build/ tree also contains
+          # signature-only *.sig.elf artifacts that use the architectural signature
+          # protocol and do not use this simulation harness termination adapter.
+          find work/titorv-rv32i/elfs/rv32i/I -type f -name '*.elf' -print | sort > "$RUNNER_TEMP/act4-elf-list.txt"
           count=$(wc -l < "$RUNNER_TEMP/act4-elf-list.txt")
           echo "Generated ACT4 ELF count: $count"
           if [[ "$count" -eq 0 ]]; then
@@ -146,7 +147,7 @@ jobs:
         shell: bash
         run: |
           set -uo pipefail
-          mapfile -t elfs < <(find .tools/riscv-arch-test/work/titorv-rv32i -type f -name '*.elf' | sort)
+          mapfile -t elfs < <(find .tools/riscv-arch-test/work/titorv-rv32i/elfs/rv32i/I -type f -name '*.elf' | sort)
           echo "Discovered ACT4 ELF files: ${#elfs[@]}"
           if [[ "${#elfs[@]}" -eq 0 ]]; then
             echo "No ACT4 ELF files available to execute."
