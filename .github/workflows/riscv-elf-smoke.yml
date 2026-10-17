@@ -42,3 +42,24 @@ jobs:
 
       - name: Run compiled program on TitoRV
         run: vvp /tmp/titorv-elf-smoke.vvp +ROM=/tmp/titorv-elf-smoke.hex
+
+      - name: Fetch public RISC-V ISA tests
+        run: git clone --depth 1 --recurse-submodules https://github.com/riscv-software-src/riscv-tests.git /tmp/riscv-tests
+
+      - name: Build public RV32UI ADD test
+        run: |
+          riscv64-unknown-elf-gcc \
+            -march=rv32i -mabi=ilp32 -static -mcmodel=medany \
+            -nostdlib -nostartfiles -fno-pic -fno-pie \
+            -I/tmp/riscv-tests/env/p \
+            -I/tmp/riscv-tests/isa/macros/scalar \
+            -T verification/riscv-tests-link.ld \
+            -Wl,--no-relax -Wl,-e,_start \
+            /tmp/riscv-tests/isa/rv32ui/add.S \
+            -o /tmp/titorv-riscv-tests-add.elf
+          riscv64-unknown-elf-objcopy -O binary /tmp/titorv-riscv-tests-add.elf /tmp/titorv-riscv-tests-add.bin
+          python3 verification/bin_to_hex.py /tmp/titorv-riscv-tests-add.bin /tmp/titorv-riscv-tests-add.hex
+          riscv64-unknown-elf-objdump -d /tmp/titorv-riscv-tests-add.elf
+
+      - name: Run public RV32UI ADD test on TitoRV
+        run: vvp /tmp/titorv-elf-smoke.vvp +ROM=/tmp/titorv-riscv-tests-add.hex
