@@ -124,7 +124,7 @@ module tb_riscv_elf;
             if (rvalid && rready)
                 rvalid <= 1'b0;
 
-            if (trap_valid) begin
+            if (trap_valid && !finished) begin
                 // riscv-tests uses the standard machine-mode ecall exit ABI:
                 // a7=93 and a0=0 means pass; a nonzero a0 is a test failure.
                 if ((trap_cause == 32'd11) && (dut.rf[17] == 32'd93)) begin
