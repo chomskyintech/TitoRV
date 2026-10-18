@@ -24,6 +24,11 @@ init_error = '''#error \\
 if init_error not in source:
     raise SystemExit("Could not locate upstream portable_init placeholder")
 source = source.replace(init_error, "", 1)
+source = re.sub(
+    r"#define EE_TICKS_PER_SEC\\s+.*",
+    "#define EE_TICKS_PER_SEC 1 /* simulation cycles, not seconds */",
+    source
+)
 port.write_text(source)
 
 # In simulation, one tick is one RTL clock cycle. This is not wall-clock seconds.
