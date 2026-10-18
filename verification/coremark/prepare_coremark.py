@@ -5,6 +5,7 @@ This deliberately does not produce an official CoreMark performance score:
 the timer exposes simulated core cycles, not seconds on a calibrated target.
 """
 from pathlib import Path
+import re
 import sys
 
 root = Path(sys.argv[1])
@@ -28,10 +29,18 @@ port.write_text(source)
 # In simulation, one tick is one RTL clock cycle. This is not wall-clock seconds.
 port_header = root / "barebones" / "core_portme.h"
 header = port_header.read_text()
-header = header.replace(
-    "#define EE_TICKS_PER_SEC           (CLOCKS_PER_SEC / TIMER_RES_DIVIDER)",
-    "#define EE_TICKS_PER_SEC           1 /* simulation cycles, not seconds */"
+header = re.sub(
+    r"#define EE_TICKS_PER_SEC\\s+.*",
+    "#define EE_TICKS_PER_SEC 1 /* simulation cycles, not seconds */",
+    header
 )
+if "#include <stddef.h>" not in header:
+    header = header.replace("#define CORE_PORTME_H", "#define CORE_PORTME_H\\n\\n#include <stddef.h>\\n")
+if "define FLAGS_STR" not in header:
+    header = header.replace(
+        "#define CORE_PORTME_H",
+        "#define CORE_PORTME_H\\n#ifndef FLAGS_STR\\n#define FLAGS_STR \\"TitoRV simulation validation\\"\\n#endif"
+    )
 port_header.write_text(header)
 
 # Make validation failures observable to the startup stub. Upstream CoreMark
