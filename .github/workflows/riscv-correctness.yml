@@ -5,6 +5,7 @@ on:
     branches:
       - master
       - verification/riscv-directed-tests
+      - benchmark/retirement-counter
   pull_request:
     branches:
       - master
