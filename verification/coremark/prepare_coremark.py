@@ -57,5 +57,5 @@ old = "    return MAIN_RETURN_VAL;\n}"
 if old not in text:
     raise SystemExit("Could not locate final CoreMark main return")
 before, after = text.rsplit(old, 1)
-text = before + "    return (total_errors == 0) ? MAIN_RETURN_VAL : 1;\n}" + after
+text = before + "    *(volatile ee_u32 *)0x20000008 = (ee_u32)total_errors;\n    return (total_errors == 0) ? MAIN_RETURN_VAL : 1;\n}" + after
 main.write_text(text)
