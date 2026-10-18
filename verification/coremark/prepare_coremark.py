@@ -30,16 +30,22 @@ port.write_text(source)
 port_header = root / "barebones" / "core_portme.h"
 header = port_header.read_text()
 header = re.sub(
-    r"#define EE_TICKS_PER_SEC\\s+.*",
+    r"#define EE_TICKS_PER_SEC\s+.*",
     "#define EE_TICKS_PER_SEC 1 /* simulation cycles, not seconds */",
     header
 )
 if "#include <stddef.h>" not in header:
-    header = header.replace("#define CORE_PORTME_H", "#define CORE_PORTME_H\\n\\n#include <stddef.h>\\n")
+    header = header.replace(
+        "#define CORE_PORTME_H",
+        "#define CORE_PORTME_H" + chr(10) + "#include <stddef.h>" + chr(10)
+    )
 if "define FLAGS_STR" not in header:
     header = header.replace(
         "#define CORE_PORTME_H",
-        "#define CORE_PORTME_H\\n#ifndef FLAGS_STR\\n#define FLAGS_STR \\"TitoRV simulation validation\\"\\n#endif"
+        "#define CORE_PORTME_H" + chr(10) +
+        "#ifndef FLAGS_STR" + chr(10) +
+        "#define FLAGS_STR " + chr(34) + "TitoRV simulation validation" + chr(34) + chr(10) +
+        "#endif" + chr(10)
     )
 port_header.write_text(header)
 
