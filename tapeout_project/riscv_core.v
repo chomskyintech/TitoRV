@@ -737,6 +737,7 @@ begin
     end
     else if(ex_valid)
     begin
+      `ifdef TITORV_DEBUG
       $display(
     "PIPE: PC=%h IF_PC=%h IF_INSN=%h EX_PC=%h EX_INSN=%h AXI_STATE=%0d",
     pc,
@@ -746,6 +747,7 @@ begin
     ex_insn,
     axi_state
 );
+      `endif
 
         case(opcode)
 
@@ -767,7 +769,9 @@ begin
             begin
                 if(valid_addi && rd != 0) begin
                     rf[rd] <= alu_out;
+                    `ifdef TITORV_DEBUG
                     $display("EXEC ADDI: rd=x%0d result=%h", rd, alu_out);
+                    `endif
                 end
             end
 
@@ -779,7 +783,9 @@ begin
             begin
                 if(valid_arithr && rd != 0) begin
                     rf[rd] <= alu_out;
+                    `ifdef TITORV_DEBUG
                     $display("EXEC ARITH: rd=x%0d result=%h", rd, alu_out);
+                    `endif
                 end
             end
 
