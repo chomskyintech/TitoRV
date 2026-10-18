@@ -58,6 +58,8 @@ jobs:
             grep -F "PASS: ELF program wrote the PASS token" "$log"
             metrics="$(grep -F 'BENCHMARK-METRICS ' "$log")"
             test -n "$metrics"
+            grep -Eq 'retired_instructions=[1-9][0-9]*' "$log"
+            grep -Eq 'IPC=[0-9]+\.[0-9]+' "$log"
             printf '%s,"%s"\n' "$name" "$metrics" >> benchmark-results/summary.csv
           done
 
