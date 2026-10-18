@@ -145,7 +145,12 @@ module tb_riscv_elf;
                 bvalid <= 1'b0;
 
             if (arvalid && arready && !rvalid) begin
-                rdata <= dmem[araddr[17:2]];
+                // CoreMark's simulation-only timer reads elapsed RTL cycles.
+                // This is deliberately not a calibrated wall-clock timer.
+                if (araddr == 32'h20000004)
+                    rdata <= cycles;
+                else
+                    rdata <= dmem[araddr[17:2]];
                 rvalid <= 1'b1;
             end
             if (rvalid && rready)
@@ -244,7 +249,9 @@ module tb_riscv_elf;
     end
 
     initial begin
-        #200000;
+        // Large C workloads such as CoreMark need more cycles than the short
+        // hand-written microbenchmarks. Two million cycles at the current clock.
+        #20000000;
         if (!finished) begin
             $display("FAIL: ELF execution timeout pc=%08x", dut.pc);
             $fatal(1);

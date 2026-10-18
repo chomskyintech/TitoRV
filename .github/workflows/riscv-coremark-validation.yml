@@ -1,0 +1,90 @@
+name: TitoRV CoreMark RV32I simulation validation
+
+on:
+  push:
+    branches:
+      - benchmark/coremark-rv32i
+  pull_request:
+    branches:
+      - master
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  coremark-validation:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Check out TitoRV
+        uses: actions/checkout@v4
+
+      - name: Check out upstream EEMBC CoreMark
+        uses: actions/checkout@v4
+        with:
+          repository: eembc/coremark
+          ref: main
+          path: .tools/coremark
+
+      - name: Install RISC-V toolchain and Icarus Verilog
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y gcc-riscv64-unknown-elf binutils-riscv64-unknown-elf iverilog
+
+      - name: Prepare simulation port and record upstream revision
+        run: |
+          set -euo pipefail
+          python3 verification/coremark/prepare_coremark.py .tools/coremark
+          echo "CoreMark upstream revision: $(git -C .tools/coremark rev-parse HEAD)" | tee coremark-upstream.txt
+          mkdir -p coremark-results
+
+      - name: Build CoreMark validation ELF
+        run: |
+          set -euo pipefail
+          cd .tools/coremark
+          riscv64-unknown-elf-gcc \
+            -march=rv32i -mabi=ilp32 -O2 -ffreestanding -fno-builtin \
+            -fno-pic -fno-pie -msmall-data-limit=0 \
+            -nostdlib \
+            -DVALIDATION_RUN=1 -DITERATIONS=1 -DTOTAL_DATA_SIZE=2000 \
+            -DMEM_METHOD=0 -DHAS_FLOAT=0 -DHAS_STDIO=0 -DHAS_PRINTF=0 \
+            -I. -Ibarebones \
+            ../../verification/coremark/start.S \
+            core_list_join.c core_main.c core_matrix.c core_state.c core_util.c \
+            barebones/core_portme.c ../../verification/coremark/ee_printf_stub.c \
+            -Wl,-T,../../verification/coremark/link.ld -Wl,--no-relax -Wl,-e,_start \
+            -lgcc -o ../../coremark-results/coremark-validation.elf
+          riscv64-unknown-elf-objcopy -O binary ../../coremark-results/coremark-validation.elf ../../coremark-results/coremark-validation.bin
+          cd ../..
+          python3 verification/bin_to_hex.py coremark-results/coremark-validation.bin coremark-results/coremark-validation.hex
+          riscv64-unknown-elf-size coremark-results/coremark-validation.elf | tee coremark-results/size.txt
+
+      - name: Compile RTL execution harness
+        run: |
+          iverilog -g2012 -Wall -s tb_riscv_elf -o /tmp/titorv-coremark.vvp \
+            tapeout_project/riscv_core.v tapeout_project/riscv_elf_tb.sv
+
+      - name: Run CoreMark validation
+        shell: bash
+        run: |
+          set -euo pipefail
+          timeout 300s vvp /tmp/titorv-coremark.vvp "+ROM=coremark-results/coremark-validation.hex" +METRICS 2>&1 | tee coremark-results/simulation.log
+          grep -F "PASS: ELF program wrote the PASS token" coremark-results/simulation.log
+          grep -F "BENCHMARK-METRICS " coremark-results/simulation.log
+          echo "### CoreMark RV32I simulation validation" >> "$GITHUB_STEP_SUMMARY"
+          echo "This is a correctness/validation run only. The timer is simulated RTL cycles, not calibrated seconds; no official CoreMark score is claimed." >> "$GITHUB_STEP_SUMMARY"
+          cat coremark-upstream.txt >> "$GITHUB_STEP_SUMMARY"
+          cat coremark-results/size.txt >> "$GITHUB_STEP_SUMMARY"
+          grep -F "BENCHMARK-METRICS " coremark-results/simulation.log >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload CoreMark validation artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: titorv-coremark-simulation-validation
+          path: |
+            coremark-results/
+            coremark-upstream.txt
+          if-no-files-found: warn
+          retention-days: 14
