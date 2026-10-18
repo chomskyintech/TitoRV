@@ -36,6 +36,7 @@ module tb_riscv_elf;
     integer i;
     integer cycles = 0;
     integer executed_non_nop_proxy = 0;
+    integer retired_count = 0;
     integer stall_cycles = 0;
     integer load_count = 0;
     integer store_count = 0;
@@ -44,6 +45,8 @@ module tb_riscv_elf;
     reg coremark_validation_seen = 1'b0;
     integer coremark_error_count = -1;
     real cpi_proxy;
+    real cpi_architectural;
+    real ipc_architectural;
     integer file_handle, line_chars, rom_word_count;
     integer sig_file_handle, sig_i;
     reg [31:0] sig_start_addr, sig_end_addr;
@@ -86,6 +89,7 @@ module tb_riscv_elf;
             saved_wstrb <= 4'd0;
             cycles <= 0;
             executed_non_nop_proxy <= 0;
+            retired_count <= 0;
             stall_cycles <= 0;
             load_count <= 0;
             store_count <= 0;
@@ -105,6 +109,19 @@ module tb_riscv_elf;
                     default: begin end
                 endcase
             end
+
+            // Count real instruction slots only. Non-memory instructions retire
+            // on their execute edge; loads retire on the AXI read-data handshake;
+            // stores retire when their write becomes visible in the harness RAM.
+            // ex_real_valid excludes synthetic pipeline-flush bubbles.
+            if (dut.ex_valid && dut.ex_real_valid && !dut.pipe_stall &&
+                !dut.illegal_instruction && !dut.system_exception &&
+                !((dut.opcode == 7'b0000011) && dut.valid_load) &&
+                !((dut.opcode == 7'b0100011) && dut.valid_store)) begin
+                retired_count <= retired_count + 1;
+            end
+            if ((dut.axi_state == 3'd5) && rvalid && rready)
+                retired_count <= retired_count + 1;
             // Always-ready request channels. Responses are registered below.
             awready <= 1'b1;
             wready <= 1'b1;
@@ -130,6 +147,8 @@ module tb_riscv_elf;
                 commit_addr = (awvalid && awready) ? awaddr : saved_awaddr;
                 commit_data = (wvalid && wready) ? wdata : saved_wdata;
                 commit_strb = (wvalid && wready) ? wstrb : saved_wstrb;
+                // The RAM side effect is the harness commit point for every store.
+                retired_count <= retired_count + 1;
                 if (commit_addr == PASS_ADDR) begin
                     if (commit_data == 32'd1) begin
                         $display("PASS: ELF program wrote the PASS token after %0d cycles.", cycles);
@@ -247,8 +266,10 @@ module tb_riscv_elf;
         end
         if (have_metrics) begin
             cpi_proxy = (executed_non_nop_proxy == 0) ? 0.0 : (1.0 * cycles) / executed_non_nop_proxy;
-            $display("BENCHMARK-METRICS cycles=%0d executed_non_nop_proxy=%0d stall_cycles=%0d loads=%0d stores=%0d CPI_proxy=%0.3f",
-                     cycles, executed_non_nop_proxy, stall_cycles, load_count, store_count, cpi_proxy);
+            cpi_architectural = (retired_count == 0) ? 0.0 : (1.0 * cycles) / retired_count;
+            ipc_architectural = (cycles == 0) ? 0.0 : (1.0 * retired_count) / cycles;
+            $display("BENCHMARK-METRICS cycles=%0d retired_instructions=%0d IPC=%0.4f CPI=%0.4f executed_non_nop_proxy=%0d stall_cycles=%0d loads=%0d stores=%0d CPI_proxy=%0.3f",
+                     cycles, retired_count, ipc_architectural, cpi_architectural, executed_non_nop_proxy, stall_cycles, load_count, store_count, cpi_proxy);
         end
         #19;
         // Emit the DUT's signature words in the same format as ACT4's Sail
