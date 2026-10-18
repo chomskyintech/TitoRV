@@ -17,6 +17,11 @@ module riscv_core
     output reg  [31:0] trap_pc,
     output reg  [31:0] trap_cause,
 
+    // Architectural instruction completion event for simulation metrics.
+    output reg         retire_valid,
+    output reg  [31:0] retire_pc,
+    output reg  [31:0] retire_insn,
+
     // ============================================================
     // AXI-Lite Write Address
     // ============================================================
@@ -91,6 +96,8 @@ reg [31:0] csr_mtvec;
 reg [31:0] csr_mscratch;
 reg [31:0] csr_mepc;
 reg [31:0] csr_mcause;
+reg [31:0] mem_retire_pc;
+reg [31:0] mem_retire_insn;
 
 localparam [11:0] CSR_MSTATUS  = 12'h300;
 localparam [11:0] CSR_MTVEC    = 12'h305;
@@ -427,6 +434,11 @@ begin
         trap_valid <= 1'b0;
         trap_pc <= 32'd0;
         trap_cause <= 32'd0;
+        retire_valid <= 1'b0;
+        retire_pc <= 32'd0;
+        retire_insn <= 32'd0;
+        mem_retire_pc <= 32'd0;
+        mem_retire_insn <= 32'd0;
         csr_mstatus <= 32'h0000_1800;
         csr_mtvec <= 32'd0;
         csr_mscratch <= 32'd0;
@@ -469,6 +481,9 @@ begin
 
     else
     begin
+        // One-cycle completion pulse; memory instructions pulse only when
+        // their AXI response completes, not when the request is issued.
+        retire_valid <= 1'b0;
 
         // =====================================================
         // AXI STATE MACHINE
@@ -563,6 +578,11 @@ begin
 
   if(M_AXI_BVALID && M_AXI_BREADY)
     begin
+        if (mem_retire_insn[6:0] == OP_STORE) begin
+            retire_valid <= 1'b1;
+            retire_pc <= mem_retire_pc;
+            retire_insn <= mem_retire_insn;
+        end
            $display(
             "AXI B HANDSHAKE: BRESP=%b",
             M_AXI_BRESP
@@ -610,6 +630,9 @@ begin
 
     if(M_AXI_RVALID && M_AXI_RREADY)
     begin
+        retire_valid <= 1'b1;
+        retire_pc <= mem_retire_pc;
+        retire_insn <= mem_retire_insn;
         if(axi_rd != 0)
             rf[axi_rd] <= load_result;
 
@@ -722,6 +745,9 @@ begin
     end
     else if(ex_valid && system_mret)
     begin
+        retire_valid <= 1'b1;
+        retire_pc <= ex_pc;
+        retire_insn <= ex_insn;
         // MRET restores the interrupt-enable stack and resumes at mepc.
         csr_mstatus <= (csr_mstatus & ~32'h0000_0088) |
                        ((csr_mstatus & 32'h0000_0080) >> 4) |
@@ -737,6 +763,12 @@ begin
     end
     else if(ex_valid)
     begin
+        // Loads/stores complete on their AXI response handshake.
+        if ((opcode != OP_LOAD) && (opcode != OP_STORE)) begin
+            retire_valid <= 1'b1;
+            retire_pc <= ex_pc;
+            retire_insn <= ex_insn;
+        end
       `ifdef TITORV_DEBUG
       $display(
     "PIPE: PC=%h IF_PC=%h IF_INSN=%h EX_PC=%h EX_INSN=%h AXI_STATE=%0d",
@@ -889,6 +921,8 @@ begin
                 M_AXI_ARADDR  <= {alu_out[31:2], 2'b00};
                 M_AXI_ARVALID <= 1'b1;
 
+                mem_retire_pc <= ex_pc;
+                mem_retire_insn <= ex_insn;
                 axi_rd    <= rd;
                 axi_load_funct3 <= funct3;
                 axi_load_addr_low <= alu_out[1:0];
@@ -910,6 +944,8 @@ begin
             OP_STORE:
             begin
                 if(valid_store) begin
+                mem_retire_pc <= ex_pc;
+                mem_retire_insn <= ex_insn;
                 M_AXI_AWADDR <= {alu_out[31:2], 2'b00};
                 M_AXI_WDATA  <= rs2_data << (alu_out[1:0] * 8);
                 case (funct3)
