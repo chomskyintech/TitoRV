@@ -46,7 +46,7 @@ jobs:
           riscv64-unknown-elf-gcc \
             -march=rv32i -mabi=ilp32 -O2 -ffreestanding -fno-builtin \
             -fno-pic -fno-pie -msmall-data-limit=0 \
-            -nostartfiles -specs=nosys.specs \
+            -nostdlib \
             -DVALIDATION_RUN=1 -DITERATIONS=1 -DTOTAL_DATA_SIZE=2000 \
             -DMEM_METHOD=0 -DHAS_FLOAT=0 -DHAS_STDIO=0 -DHAS_PRINTF=0 \
             -I. -Ibarebones \
@@ -54,7 +54,7 @@ jobs:
             core_list_join.c core_main.c core_matrix.c core_state.c core_util.c \
             barebones/core_portme.c ../../verification/coremark/ee_printf_stub.c \
             -Wl,-T,../../verification/coremark/link.ld -Wl,--no-relax -Wl,-e,_start \
-            -o ../../coremark-results/coremark-validation.elf
+            -lgcc -o ../../coremark-results/coremark-validation.elf
           riscv64-unknown-elf-objcopy -O binary ../../coremark-results/coremark-validation.elf ../../coremark-results/coremark-validation.bin
           cd ../..
           python3 verification/bin_to_hex.py coremark-results/coremark-validation.bin coremark-results/coremark-validation.hex
