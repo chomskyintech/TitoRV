@@ -36,6 +36,7 @@ module tb_riscv_elf;
     integer i;
     integer cycles = 0;
     integer executed_non_nop_proxy = 0;
+    integer retired_instructions = 0;
     integer stall_cycles = 0;
     integer load_count = 0;
     integer store_count = 0;
@@ -44,6 +45,7 @@ module tb_riscv_elf;
     reg coremark_validation_seen = 1'b0;
     integer coremark_error_count = -1;
     real cpi_proxy;
+    real cpi_arch;
     integer file_handle, line_chars, rom_word_count;
     integer sig_file_handle, sig_i;
     reg [31:0] sig_start_addr, sig_end_addr;
@@ -86,6 +88,7 @@ module tb_riscv_elf;
             saved_wstrb <= 4'd0;
             cycles <= 0;
             executed_non_nop_proxy <= 0;
+            retired_instructions <= 0;
             stall_cycles <= 0;
             load_count <= 0;
             store_count <= 0;
@@ -95,6 +98,8 @@ module tb_riscv_elf;
             cycles <= cycles + 1;
             if (dut.pipe_stall)
                 stall_cycles <= stall_cycles + 1;
+            if (dut.retire_valid)
+                retired_instructions <= retired_instructions + 1;
             // This is a non-NOP execute-slot proxy, not a verified retirement event.
             // It must not be reported as an architectural retired-instruction count.
             if (dut.ex_valid && !dut.pipe_stall && (dut.ex_insn != 32'h00000013)) begin
@@ -240,6 +245,9 @@ module tb_riscv_elf;
         repeat (5) @(posedge clk);
         resetb = 1'b1;
         wait (finished);
+        // The PASS store marks completion when the write reaches RAM; wait for
+        // the core's corresponding architectural completion pulse before metrics.
+        wait (dut.retire_valid);
         #1;
         if (have_coremark_validation && !coremark_validation_seen) begin
             $display("FAIL: CoreMark validation error-count marker was not observed");
@@ -247,8 +255,9 @@ module tb_riscv_elf;
         end
         if (have_metrics) begin
             cpi_proxy = (executed_non_nop_proxy == 0) ? 0.0 : (1.0 * cycles) / executed_non_nop_proxy;
-            $display("BENCHMARK-METRICS cycles=%0d executed_non_nop_proxy=%0d stall_cycles=%0d loads=%0d stores=%0d CPI_proxy=%0.3f",
-                     cycles, executed_non_nop_proxy, stall_cycles, load_count, store_count, cpi_proxy);
+            cpi_arch = (retired_instructions == 0) ? 0.0 : (1.0 * cycles) / retired_instructions;
+            $display("BENCHMARK-METRICS cycles=%0d retired_instructions=%0d CPI_arch=%0.3f executed_non_nop_proxy=%0d stall_cycles=%0d loads=%0d stores=%0d CPI_proxy=%0.3f",
+                     cycles, retired_instructions, cpi_arch, executed_non_nop_proxy, stall_cycles, load_count, store_count, cpi_proxy);
         end
         #19;
         // Emit the DUT's signature words in the same format as ACT4's Sail
