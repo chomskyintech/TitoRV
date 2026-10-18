@@ -34,7 +34,7 @@ module tb_riscv_elf;
     reg [3:0] saved_wstrb = 4'd0;
     integer i;
     integer cycles = 0;
-    integer retired_count = 0;
+    integer executed_non_nop_proxy = 0;
     integer stall_cycles = 0;
     integer load_count = 0;
     integer store_count = 0;
@@ -81,7 +81,7 @@ module tb_riscv_elf;
             saved_wdata <= 32'd0;
             saved_wstrb <= 4'd0;
             cycles <= 0;
-            retired_count <= 0;
+            executed_non_nop_proxy <= 0;
             stall_cycles <= 0;
             load_count <= 0;
             store_count <= 0;
@@ -89,10 +89,10 @@ module tb_riscv_elf;
             cycles <= cycles + 1;
             if (dut.pipe_stall)
                 stall_cycles <= stall_cycles + 1;
-            // This proxy counts non-NOP execute slots. The benchmark programs
-            // contain no architectural NOPs; flush bubbles are therefore excluded.
+            // This is a non-NOP execute-slot proxy, not a verified retirement event.
+            // It must not be reported as an architectural retired-instruction count.
             if (dut.ex_valid && !dut.pipe_stall && (dut.ex_insn != 32'h00000013)) begin
-                retired_count <= retired_count + 1;
+                executed_non_nop_proxy <= executed_non_nop_proxy + 1;
                 case (dut.ex_insn[6:0])
                     7'b0000011: load_count <= load_count + 1;
                     7'b0100011: store_count <= store_count + 1;
@@ -226,9 +226,9 @@ module tb_riscv_elf;
         wait (finished);
         #1;
         if (have_metrics) begin
-            cpi_proxy = (retired_count == 0) ? 0.0 : (1.0 * cycles) / retired_count;
-            $display("BENCHMARK-METRICS cycles=%0d executed_non_nop=%0d stall_cycles=%0d loads=%0d stores=%0d CPI_proxy=%0.3f",
-                     cycles, retired_count, stall_cycles, load_count, store_count, cpi_proxy);
+            cpi_proxy = (executed_non_nop_proxy == 0) ? 0.0 : (1.0 * cycles) / executed_non_nop_proxy;
+            $display("BENCHMARK-METRICS cycles=%0d executed_non_nop_proxy=%0d stall_cycles=%0d loads=%0d stores=%0d CPI_proxy=%0.3f",
+                     cycles, executed_non_nop_proxy, stall_cycles, load_count, store_count, cpi_proxy);
         end
         #19;
         // Emit the DUT's signature words in the same format as ACT4's Sail
