@@ -250,8 +250,8 @@ module tb_riscv_elf;
 
     initial begin
         // Large C workloads such as CoreMark need more cycles than the short
-        // hand-written microbenchmarks. 500k cycles at the current clock.
-        #5000000;
+        // hand-written microbenchmarks. Two million cycles at the current clock.
+        #20000000;
         if (!finished) begin
             $display("FAIL: ELF execution timeout pc=%08x", dut.pc);
             $fatal(1);
