@@ -56,6 +56,15 @@ module tb_riscv_elf;
     reg [8*256-1:0] sig_out_file;
     reg have_sig_start, have_sig_end, have_sig_out;
 
+    // Sample the registered completion pulse on the falling edge so the
+    // counter is updated before end-of-run metrics are printed.
+    always @(negedge clk) begin
+        if (!resetb)
+            retired_instructions <= 0;
+        else if (dut.retire_valid)
+            retired_instructions <= retired_instructions + 1;
+    end
+
     riscv_core dut (
         .clk(clk), .resetb(resetb),
         .instr_addr(instr_addr), .instr_rdata(instr_rdata),
@@ -100,8 +109,6 @@ module tb_riscv_elf;
             cycles <= cycles + 1;
             if (dut.pipe_stall)
                 stall_cycles <= stall_cycles + 1;
-            if (dut.retire_valid)
-                retired_instructions <= retired_instructions + 1;
             // This is a non-NOP execute-slot proxy, not a verified retirement event.
             // It must not be reported as an architectural retired-instruction count.
             if (dut.ex_valid && !dut.pipe_stall && (dut.ex_insn != 32'h00000013)) begin
@@ -250,8 +257,10 @@ module tb_riscv_elf;
         wait (finished);
         // The PASS store marks completion when the write reaches RAM; wait for
         // the core's corresponding architectural completion pulse before metrics.
-        if (pass_store_completion)
+        if (pass_store_completion) begin
             wait (dut.retire_valid);
+            @(negedge clk);
+        end
         #1;
         if (have_coremark_validation && !coremark_validation_seen) begin
             $display("FAIL: CoreMark validation error-count marker was not observed");
