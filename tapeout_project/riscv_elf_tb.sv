@@ -9,6 +9,7 @@ module tb_riscv_elf;
     // AXI-backed simulation RAM; 256 KiB accommodates larger official ACT4 ELFs.
     localparam integer WORDS = 65536;
     localparam [31:0] PASS_ADDR = 32'h20000000;
+    localparam [31:0] COREMARK_ERRORS_ADDR = 32'h20000008;
 
     reg clk = 1'b0;
     reg resetb = 1'b0;
@@ -39,6 +40,9 @@ module tb_riscv_elf;
     integer load_count = 0;
     integer store_count = 0;
     integer have_metrics = 0;
+    integer have_coremark_validation = 0;
+    reg coremark_validation_seen = 1'b0;
+    integer coremark_error_count = -1;
     real cpi_proxy;
     integer file_handle, line_chars, rom_word_count;
     integer sig_file_handle, sig_i;
@@ -85,6 +89,8 @@ module tb_riscv_elf;
             stall_cycles <= 0;
             load_count <= 0;
             store_count <= 0;
+            coremark_validation_seen <= 1'b0;
+            coremark_error_count <= -1;
         end else begin
             cycles <= cycles + 1;
             if (dut.pipe_stall)
@@ -132,6 +138,15 @@ module tb_riscv_elf;
                         $display("FAIL: unexpected completion token %08x at %08x", commit_data, commit_addr);
                         $fatal(1);
                     end
+                end else if (commit_addr == COREMARK_ERRORS_ADDR) begin
+                    coremark_error_count <= commit_data;
+                    coremark_validation_seen <= 1'b1;
+                    if (commit_data == 0)
+                        $display("COREMARK-VALIDATION total_errors=0");
+                    else begin
+                        $display("FAIL: CoreMark validation total_errors=%0d", commit_data);
+                        $fatal(1);
+                    end
                 end else begin
                     for (lane = 0; lane < 4; lane = lane + 1)
                         if (commit_strb[lane])
@@ -177,6 +192,7 @@ module tb_riscv_elf;
 
     initial begin
         have_metrics = $test$plusargs("METRICS");
+        have_coremark_validation = $test$plusargs("COREMARK_VALIDATION");
         have_sig_start = $value$plusargs("SIG_START=%h", sig_start_addr);
         have_sig_end = $value$plusargs("SIG_END=%h", sig_end_addr);
         have_sig_out = $value$plusargs("SIG_OUT=%s", sig_out_file);
@@ -225,6 +241,10 @@ module tb_riscv_elf;
         resetb = 1'b1;
         wait (finished);
         #1;
+        if (have_coremark_validation && !coremark_validation_seen) begin
+            $display("FAIL: CoreMark validation error-count marker was not observed");
+            $fatal(1);
+        end
         if (have_metrics) begin
             cpi_proxy = (executed_non_nop_proxy == 0) ? 0.0 : (1.0 * cycles) / executed_non_nop_proxy;
             $display("BENCHMARK-METRICS cycles=%0d executed_non_nop_proxy=%0d stall_cycles=%0d loads=%0d stores=%0d CPI_proxy=%0.3f",
