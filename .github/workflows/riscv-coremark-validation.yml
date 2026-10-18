@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - benchmark/coremark-rv32i
+      - benchmark/retirement-counter
   pull_request:
     branches:
       - master
