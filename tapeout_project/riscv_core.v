@@ -112,6 +112,10 @@ reg [31:0] ex_insn;
 
 // Indicates whether ex_insn contains a valid instruction
 reg        ex_valid;
+// Validity tags distinguish fetched instructions from pipeline-flush bubbles.
+// Used by the simulation harness for architectural instruction accounting.
+reg        if_real_valid;
+reg        ex_real_valid;
 
 // ============================================================
 // AXI State Machine
@@ -424,6 +428,8 @@ begin
         ex_pc    <= 32'd0;
         ex_insn  <= 32'h00000013;
         ex_valid <= 1'b0;
+        if_real_valid <= 1'b0;
+        ex_real_valid <= 1'b0;
         trap_valid <= 1'b0;
         trap_pc <= 32'd0;
         trap_cause <= 32'd0;
@@ -668,6 +674,8 @@ begin
     ex_pc    <= if_pc;
     ex_insn  <= if_insn;
     ex_valid <= 1'b1;
+    ex_real_valid <= if_real_valid;
+    if_real_valid <= 1'b1;
 
     // ---------------------------------------------------------
     // Default PC increment
@@ -714,6 +722,8 @@ begin
         ex_pc <= {csr_mtvec[31:2], 2'b00};
         ex_insn <= 32'h00000013;
         ex_valid <= 1'b0;
+        if_real_valid <= 1'b0;
+        ex_real_valid <= 1'b0;
         $display("TRAP ENTRY: pc=%h insn=%h cause=%0d mtvec=%h",
                  ex_pc, ex_insn,
                  (ex_insn == 32'h00000073) ? 32'd11 :
@@ -733,6 +743,8 @@ begin
         ex_pc <= {csr_mepc[31:2], 2'b00};
         ex_insn <= 32'h00000013;
         ex_valid <= 1'b0;
+        if_real_valid <= 1'b0;
+        ex_real_valid <= 1'b0;
         $display("MRET: returning to %h", {csr_mepc[31:2], 2'b00});
     end
     else if(ex_valid)
@@ -813,6 +825,8 @@ begin
                 if_insn   <= 32'h00000013;
                 ex_insn   <= 32'h00000013;
                 ex_valid  <= 1'b1;
+                if_real_valid <= 1'b0;
+                ex_real_valid <= 1'b0;
             end
 
             // =================================================
@@ -838,6 +852,8 @@ begin
                         ex_pc      <= ex_pc + imm_b;
                         ex_insn    <= 32'h00000013;
                         ex_valid   <= 1'b1;
+                        if_real_valid <= 1'b0;
+                        ex_real_valid <= 1'b0;
                     end
                 end
             end
