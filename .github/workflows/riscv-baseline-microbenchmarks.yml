@@ -5,6 +5,7 @@ on:
     branches:
       - verification/alu-boundary-regression
       - benchmark/metrics-honesty
+      - benchmark/architectural-retirement-counter
       - master
   workflow_dispatch:
 
@@ -61,7 +62,7 @@ jobs:
           done
 
           echo "### TitoRV baseline microbenchmarks" >> "$GITHUB_STEP_SUMMARY"
-          echo 'CPI_proxy is cycles divided by a non-NOP execute-slot proxy. This counter is not a verified architectural retirement count. The short hand-written benchmark ELFs contain no intentional architectural NOPs, but the metric remains a proxy. These are RTL simulation measurements, not clock-frequency or silicon performance results.' >> "$GITHUB_STEP_SUMMARY"
+          echo 'CPI_arch is simulated RTL cycles divided by the core retirement-completion event count. Ordinary instructions complete at execute; loads/stores complete on AXI response handshakes. Injected flush bubbles are excluded, while architectural NOP instructions are counted. CPI_proxy remains for continuity only. These are RTL simulation measurements, not clock-frequency or silicon performance results.' >> "$GITHUB_STEP_SUMMARY"
           echo 'CSV summary follows:' >> "$GITHUB_STEP_SUMMARY"
           cat benchmark-results/summary.csv >> "$GITHUB_STEP_SUMMARY"
 
