@@ -119,6 +119,8 @@ reg [31:0] ex_insn;
 
 // Indicates whether ex_insn contains a valid instruction
 reg        ex_valid;
+reg        if_arch_valid;
+reg        ex_arch_valid;
 
 // ============================================================
 // AXI State Machine
@@ -427,10 +429,14 @@ begin
 
         if_pc   <= 32'd0;
         if_insn <= 32'h00000013;
+        if_arch_valid <= 1'b0;
 
         ex_pc    <= 32'd0;
         ex_insn  <= 32'h00000013;
+        ex_arch_valid <= 1'b0;
         ex_valid <= 1'b0;
+        if_arch_valid <= 1'b0;
+        ex_arch_valid <= 1'b0;
         trap_valid <= 1'b0;
         trap_pc <= 32'd0;
         trap_cause <= 32'd0;
@@ -678,6 +684,7 @@ begin
 
     if_pc   <= pc;
     if_insn <= instr_rdata;
+    if_arch_valid <= 1'b1;
 
     // The ROM output corresponds to the address held before this edge.
     // Advance the address in lockstep with the PC so sampled instruction data
@@ -691,6 +698,7 @@ begin
     ex_pc    <= if_pc;
     ex_insn  <= if_insn;
     ex_valid <= 1'b1;
+    ex_arch_valid <= if_arch_valid;
 
     // ---------------------------------------------------------
     // Default PC increment
@@ -734,8 +742,10 @@ begin
         instr_addr <= {csr_mtvec[31:2], 2'b00};
         if_pc <= {csr_mtvec[31:2], 2'b00};
         if_insn <= 32'h00000013;
+        if_arch_valid <= 1'b0;
         ex_pc <= {csr_mtvec[31:2], 2'b00};
         ex_insn <= 32'h00000013;
+        ex_arch_valid <= 1'b0;
         ex_valid <= 1'b0;
         $display("TRAP ENTRY: pc=%h insn=%h cause=%0d mtvec=%h",
                  ex_pc, ex_insn,
@@ -756,15 +766,17 @@ begin
         instr_addr <= {csr_mepc[31:2], 2'b00};
         if_pc <= {csr_mepc[31:2], 2'b00};
         if_insn <= 32'h00000013;
+        if_arch_valid <= 1'b0;
         ex_pc <= {csr_mepc[31:2], 2'b00};
         ex_insn <= 32'h00000013;
+        ex_arch_valid <= 1'b0;
         ex_valid <= 1'b0;
         $display("MRET: returning to %h", {csr_mepc[31:2], 2'b00});
     end
     else if(ex_valid)
     begin
         // Loads/stores complete on their AXI response handshake.
-        if ((opcode != OP_LOAD) && (opcode != OP_STORE)) begin
+        if (ex_arch_valid && (opcode != OP_LOAD) && (opcode != OP_STORE)) begin
             retire_valid <= 1'b1;
             retire_pc <= ex_pc;
             retire_insn <= ex_insn;
@@ -843,7 +855,9 @@ begin
                     ex_pc      <= ex_pc + imm_j;
                 end
                 if_insn   <= 32'h00000013;
+        if_arch_valid <= 1'b0;
                 ex_insn   <= 32'h00000013;
+        ex_arch_valid <= 1'b0;
                 ex_valid  <= 1'b1;
             end
 
@@ -867,8 +881,10 @@ begin
                         instr_addr <= ex_pc + imm_b;
                         if_pc      <= ex_pc + imm_b;
                         if_insn    <= 32'h00000013;
+        if_arch_valid <= 1'b0;
                         ex_pc      <= ex_pc + imm_b;
                         ex_insn    <= 32'h00000013;
+        ex_arch_valid <= 1'b0;
                         ex_valid   <= 1'b1;
                     end
                 end
