@@ -24,21 +24,16 @@ init_error = '''#error \\
 if init_error not in source:
     raise SystemExit("Could not locate upstream portable_init placeholder")
 source = source.replace(init_error, "", 1)
-source = re.sub(
-    r"#define EE_TICKS_PER_SEC\\s+.*",
-    "#define EE_TICKS_PER_SEC 1 /* simulation cycles, not seconds */",
-    source
-)
+source = chr(10).join(
+    line if not line.startswith("#define EE_TICKS_PER_SEC")
+    else "#define EE_TICKS_PER_SEC 1 /* simulation cycles, not seconds */"
+    for line in source.splitlines()
+) + chr(10)
 port.write_text(source)
 
 # In simulation, one tick is one RTL clock cycle. This is not wall-clock seconds.
 port_header = root / "barebones" / "core_portme.h"
 header = port_header.read_text()
-header = re.sub(
-    r"#define EE_TICKS_PER_SEC\s+.*",
-    "#define EE_TICKS_PER_SEC 1 /* simulation cycles, not seconds */",
-    header
-)
 if "#include <stddef.h>" not in header:
     header = header.replace(
         "#define CORE_PORTME_H",
