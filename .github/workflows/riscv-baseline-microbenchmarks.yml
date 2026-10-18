@@ -4,6 +4,8 @@ on:
   push:
     branches:
       - verification/alu-boundary-regression
+      - benchmark/metrics-honesty
+      - master
   workflow_dispatch:
 
 permissions:
@@ -59,7 +61,7 @@ jobs:
           done
 
           echo "### TitoRV baseline microbenchmarks" >> "$GITHUB_STEP_SUMMARY"
-          echo 'CPI is a simulation proxy: cycles divided by non-NOP execute slots. The benchmark ELFs intentionally contain no architectural NOP instructions, so flush bubbles are excluded. These are RTL simulation measurements, not clock-frequency or silicon performance results.' >> "$GITHUB_STEP_SUMMARY"
+          echo 'CPI_proxy is cycles divided by a non-NOP execute-slot proxy. This counter is not a verified architectural retirement count. The short hand-written benchmark ELFs contain no intentional architectural NOPs, but the metric remains a proxy. These are RTL simulation measurements, not clock-frequency or silicon performance results.' >> "$GITHUB_STEP_SUMMARY"
           echo 'CSV summary follows:' >> "$GITHUB_STEP_SUMMARY"
           cat benchmark-results/summary.csv >> "$GITHUB_STEP_SUMMARY"
 
