@@ -51,6 +51,7 @@ module tb_riscv_elf;
     reg [31:0] sig_start_addr, sig_end_addr;
     reg [8*256-1:0] line_buffer;
     reg finished = 1'b0;
+    reg pass_store_completion = 1'b0;
     reg [8*256-1:0] rom_file;
     reg [8*256-1:0] sig_out_file;
     reg have_sig_start, have_sig_end, have_sig_out;
@@ -94,6 +95,7 @@ module tb_riscv_elf;
             store_count <= 0;
             coremark_validation_seen <= 1'b0;
             coremark_error_count <= -1;
+            pass_store_completion <= 1'b0;
         end else begin
             cycles <= cycles + 1;
             if (dut.pipe_stall)
@@ -139,6 +141,7 @@ module tb_riscv_elf;
                     if (commit_data == 32'd1) begin
                         $display("PASS: ELF program wrote the PASS token after %0d cycles.", cycles);
                         finished <= 1'b1;
+                        pass_store_completion <= 1'b1;
                     end else begin
                         $display("FAIL: unexpected completion token %08x at %08x", commit_data, commit_addr);
                         $fatal(1);
@@ -247,7 +250,8 @@ module tb_riscv_elf;
         wait (finished);
         // The PASS store marks completion when the write reaches RAM; wait for
         // the core's corresponding architectural completion pulse before metrics.
-        wait (dut.retire_valid);
+        if (pass_store_completion)
+            wait (dut.retire_valid);
         #1;
         if (have_coremark_validation && !coremark_validation_seen) begin
             $display("FAIL: CoreMark validation error-count marker was not observed");
