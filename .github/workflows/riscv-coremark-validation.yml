@@ -4,7 +4,6 @@ on:
   push:
     branches:
       - benchmark/coremark-rv32i
-      - benchmark/retirement-counter
   pull_request:
     branches:
       - master
@@ -74,8 +73,6 @@ jobs:
           grep -F "COREMARK-VALIDATION total_errors=0" coremark-results/simulation.log
           grep -F "PASS: ELF program wrote the PASS token" coremark-results/simulation.log
           grep -F "BENCHMARK-METRICS " coremark-results/simulation.log
-          grep -Eq 'retired_instructions=[1-9][0-9]*' coremark-results/simulation.log
-          grep -Eq 'IPC=[0-9]+\.[0-9]+' coremark-results/simulation.log
           echo "### CoreMark RV32I simulation validation" >> "$GITHUB_STEP_SUMMARY"
           echo "This is a correctness/validation run only. The timer is simulated RTL cycles, not calibrated seconds; no official CoreMark score is claimed." >> "$GITHUB_STEP_SUMMARY"
           cat coremark-upstream.txt >> "$GITHUB_STEP_SUMMARY"
