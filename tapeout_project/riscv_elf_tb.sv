@@ -37,6 +37,8 @@ module tb_riscv_elf;
     integer cycles = 0;
     integer executed_non_nop_proxy = 0;
     integer retired_instructions = 0;
+    integer expected_retired = -1;
+    integer have_expected_retired = 0;
     integer stall_cycles = 0;
     integer load_count = 0;
     integer store_count = 0;
@@ -207,6 +209,7 @@ module tb_riscv_elf;
 
     initial begin
         have_metrics = $test$plusargs("METRICS");
+        have_expected_retired = $value$plusargs("EXPECTED_RETIRED=%d", expected_retired);
         have_coremark_validation = $test$plusargs("COREMARK_VALIDATION");
         have_sig_start = $value$plusargs("SIG_START=%h", sig_start_addr);
         have_sig_end = $value$plusargs("SIG_END=%h", sig_end_addr);
