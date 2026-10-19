@@ -269,6 +269,13 @@ module tb_riscv_elf;
             $display("FAIL: CoreMark validation error-count marker was not observed");
             $fatal(1);
         end
+        if (have_expected_retired) begin
+            if (retired_instructions != expected_retired) begin
+                $display("FAIL: retirement count expected=%0d actual=%0d", expected_retired, retired_instructions);
+                $fatal(1);
+            end
+            $display("RETIREMENT-COUNT-CHECK expected=%0d actual=%0d", expected_retired, retired_instructions);
+        end
         if (have_metrics) begin
             cpi_proxy = (executed_non_nop_proxy == 0) ? 0.0 : (1.0 * cycles) / executed_non_nop_proxy;
             cpi_arch = (retired_instructions == 0) ? 0.0 : (1.0 * cycles) / retired_instructions;
