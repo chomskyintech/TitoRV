@@ -17,6 +17,11 @@ module riscv_core
     output reg  [31:0] trap_pc,
     output reg  [31:0] trap_cause,
 
+    // Architectural instruction completion event for simulation metrics.
+    output reg         retire_valid,
+    output reg  [31:0] retire_pc,
+    output reg  [31:0] retire_insn,
+
     // ============================================================
     // AXI-Lite Write Address
     // ============================================================
@@ -91,6 +96,8 @@ reg [31:0] csr_mtvec;
 reg [31:0] csr_mscratch;
 reg [31:0] csr_mepc;
 reg [31:0] csr_mcause;
+reg [31:0] mem_retire_pc;
+reg [31:0] mem_retire_insn;
 
 localparam [11:0] CSR_MSTATUS  = 12'h300;
 localparam [11:0] CSR_MTVEC    = 12'h305;
@@ -112,6 +119,8 @@ reg [31:0] ex_insn;
 
 // Indicates whether ex_insn contains a valid instruction
 reg        ex_valid;
+reg        if_arch_valid;
+reg        ex_arch_valid;
 
 // ============================================================
 // AXI State Machine
@@ -420,13 +429,22 @@ begin
 
         if_pc   <= 32'd0;
         if_insn <= 32'h00000013;
+        if_arch_valid <= 1'b0;
 
         ex_pc    <= 32'd0;
         ex_insn  <= 32'h00000013;
+        ex_arch_valid <= 1'b0;
         ex_valid <= 1'b0;
+        if_arch_valid <= 1'b0;
+        ex_arch_valid <= 1'b0;
         trap_valid <= 1'b0;
         trap_pc <= 32'd0;
         trap_cause <= 32'd0;
+        retire_valid <= 1'b0;
+        retire_pc <= 32'd0;
+        retire_insn <= 32'd0;
+        mem_retire_pc <= 32'd0;
+        mem_retire_insn <= 32'd0;
         csr_mstatus <= 32'h0000_1800;
         csr_mtvec <= 32'd0;
         csr_mscratch <= 32'd0;
@@ -469,6 +487,9 @@ begin
 
     else
     begin
+        // One-cycle completion pulse; memory instructions pulse only when
+        // their AXI response completes, not when the request is issued.
+        retire_valid <= 1'b0;
 
         // =====================================================
         // AXI STATE MACHINE
@@ -563,6 +584,11 @@ begin
 
   if(M_AXI_BVALID && M_AXI_BREADY)
     begin
+        if (mem_retire_insn[6:0] == OP_STORE) begin
+            retire_valid <= 1'b1;
+            retire_pc <= mem_retire_pc;
+            retire_insn <= mem_retire_insn;
+        end
            $display(
             "AXI B HANDSHAKE: BRESP=%b",
             M_AXI_BRESP
@@ -610,6 +636,9 @@ begin
 
     if(M_AXI_RVALID && M_AXI_RREADY)
     begin
+        retire_valid <= 1'b1;
+        retire_pc <= mem_retire_pc;
+        retire_insn <= mem_retire_insn;
         if(axi_rd != 0)
             rf[axi_rd] <= load_result;
 
@@ -655,6 +684,7 @@ begin
 
     if_pc   <= pc;
     if_insn <= instr_rdata;
+    if_arch_valid <= 1'b1;
 
     // The ROM output corresponds to the address held before this edge.
     // Advance the address in lockstep with the PC so sampled instruction data
@@ -668,6 +698,7 @@ begin
     ex_pc    <= if_pc;
     ex_insn  <= if_insn;
     ex_valid <= 1'b1;
+    ex_arch_valid <= if_arch_valid;
 
     // ---------------------------------------------------------
     // Default PC increment
@@ -711,8 +742,10 @@ begin
         instr_addr <= {csr_mtvec[31:2], 2'b00};
         if_pc <= {csr_mtvec[31:2], 2'b00};
         if_insn <= 32'h00000013;
+        if_arch_valid <= 1'b0;
         ex_pc <= {csr_mtvec[31:2], 2'b00};
         ex_insn <= 32'h00000013;
+        ex_arch_valid <= 1'b0;
         ex_valid <= 1'b0;
         $display("TRAP ENTRY: pc=%h insn=%h cause=%0d mtvec=%h",
                  ex_pc, ex_insn,
@@ -722,6 +755,9 @@ begin
     end
     else if(ex_valid && system_mret)
     begin
+        retire_valid <= 1'b1;
+        retire_pc <= ex_pc;
+        retire_insn <= ex_insn;
         // MRET restores the interrupt-enable stack and resumes at mepc.
         csr_mstatus <= (csr_mstatus & ~32'h0000_0088) |
                        ((csr_mstatus & 32'h0000_0080) >> 4) |
@@ -730,13 +766,21 @@ begin
         instr_addr <= {csr_mepc[31:2], 2'b00};
         if_pc <= {csr_mepc[31:2], 2'b00};
         if_insn <= 32'h00000013;
+        if_arch_valid <= 1'b0;
         ex_pc <= {csr_mepc[31:2], 2'b00};
         ex_insn <= 32'h00000013;
+        ex_arch_valid <= 1'b0;
         ex_valid <= 1'b0;
         $display("MRET: returning to %h", {csr_mepc[31:2], 2'b00});
     end
     else if(ex_valid)
     begin
+        // Loads/stores complete on their AXI response handshake.
+        if (ex_arch_valid && (opcode != OP_LOAD) && (opcode != OP_STORE)) begin
+            retire_valid <= 1'b1;
+            retire_pc <= ex_pc;
+            retire_insn <= ex_insn;
+        end
       `ifdef TITORV_DEBUG
       $display(
     "PIPE: PC=%h IF_PC=%h IF_INSN=%h EX_PC=%h EX_INSN=%h AXI_STATE=%0d",
@@ -811,7 +855,9 @@ begin
                     ex_pc      <= ex_pc + imm_j;
                 end
                 if_insn   <= 32'h00000013;
+        if_arch_valid <= 1'b0;
                 ex_insn   <= 32'h00000013;
+        ex_arch_valid <= 1'b0;
                 ex_valid  <= 1'b1;
             end
 
@@ -835,8 +881,10 @@ begin
                         instr_addr <= ex_pc + imm_b;
                         if_pc      <= ex_pc + imm_b;
                         if_insn    <= 32'h00000013;
+        if_arch_valid <= 1'b0;
                         ex_pc      <= ex_pc + imm_b;
                         ex_insn    <= 32'h00000013;
+        ex_arch_valid <= 1'b0;
                         ex_valid   <= 1'b1;
                     end
                 end
@@ -889,6 +937,8 @@ begin
                 M_AXI_ARADDR  <= {alu_out[31:2], 2'b00};
                 M_AXI_ARVALID <= 1'b1;
 
+                mem_retire_pc <= ex_pc;
+                mem_retire_insn <= ex_insn;
                 axi_rd    <= rd;
                 axi_load_funct3 <= funct3;
                 axi_load_addr_low <= alu_out[1:0];
@@ -910,6 +960,8 @@ begin
             OP_STORE:
             begin
                 if(valid_store) begin
+                mem_retire_pc <= ex_pc;
+                mem_retire_insn <= ex_insn;
                 M_AXI_AWADDR <= {alu_out[31:2], 2'b00};
                 M_AXI_WDATA  <= rs2_data << (alu_out[1:0] * 8);
                 case (funct3)

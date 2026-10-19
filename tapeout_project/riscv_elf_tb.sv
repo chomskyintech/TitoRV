@@ -36,6 +36,9 @@ module tb_riscv_elf;
     integer i;
     integer cycles = 0;
     integer executed_non_nop_proxy = 0;
+    integer retired_instructions = 0;
+    integer expected_retired = -1;
+    integer have_expected_retired = 0;
     integer stall_cycles = 0;
     integer load_count = 0;
     integer store_count = 0;
@@ -44,14 +47,25 @@ module tb_riscv_elf;
     reg coremark_validation_seen = 1'b0;
     integer coremark_error_count = -1;
     real cpi_proxy;
+    real cpi_arch;
     integer file_handle, line_chars, rom_word_count;
     integer sig_file_handle, sig_i;
     reg [31:0] sig_start_addr, sig_end_addr;
     reg [8*256-1:0] line_buffer;
     reg finished = 1'b0;
+    reg pass_store_completion = 1'b0;
     reg [8*256-1:0] rom_file;
     reg [8*256-1:0] sig_out_file;
     reg have_sig_start, have_sig_end, have_sig_out;
+
+    // Sample the registered completion pulse on the falling edge so the
+    // counter is updated before end-of-run metrics are printed.
+    always @(negedge clk) begin
+        if (!resetb)
+            retired_instructions <= 0;
+        else if (dut.retire_valid)
+            retired_instructions <= retired_instructions + 1;
+    end
 
     riscv_core dut (
         .clk(clk), .resetb(resetb),
@@ -86,11 +100,13 @@ module tb_riscv_elf;
             saved_wstrb <= 4'd0;
             cycles <= 0;
             executed_non_nop_proxy <= 0;
+            retired_instructions <= 0;
             stall_cycles <= 0;
             load_count <= 0;
             store_count <= 0;
             coremark_validation_seen <= 1'b0;
             coremark_error_count <= -1;
+            pass_store_completion <= 1'b0;
         end else begin
             cycles <= cycles + 1;
             if (dut.pipe_stall)
@@ -134,6 +150,7 @@ module tb_riscv_elf;
                     if (commit_data == 32'd1) begin
                         $display("PASS: ELF program wrote the PASS token after %0d cycles.", cycles);
                         finished <= 1'b1;
+                        pass_store_completion <= 1'b1;
                     end else begin
                         $display("FAIL: unexpected completion token %08x at %08x", commit_data, commit_addr);
                         $fatal(1);
@@ -192,6 +209,7 @@ module tb_riscv_elf;
 
     initial begin
         have_metrics = $test$plusargs("METRICS");
+        have_expected_retired = $value$plusargs("EXPECTED_RETIRED=%d", expected_retired);
         have_coremark_validation = $test$plusargs("COREMARK_VALIDATION");
         have_sig_start = $value$plusargs("SIG_START=%h", sig_start_addr);
         have_sig_end = $value$plusargs("SIG_END=%h", sig_end_addr);
@@ -240,15 +258,29 @@ module tb_riscv_elf;
         repeat (5) @(posedge clk);
         resetb = 1'b1;
         wait (finished);
+        // The PASS store marks completion when the write reaches RAM; wait for
+        // the core's corresponding architectural completion pulse before metrics.
+        if (pass_store_completion) begin
+            wait (dut.retire_valid);
+            @(negedge clk);
+        end
         #1;
         if (have_coremark_validation && !coremark_validation_seen) begin
             $display("FAIL: CoreMark validation error-count marker was not observed");
             $fatal(1);
         end
+        if (have_expected_retired) begin
+            if (retired_instructions != expected_retired) begin
+                $display("FAIL: retirement count expected=%0d actual=%0d", expected_retired, retired_instructions);
+                $fatal(1);
+            end
+            $display("RETIREMENT-COUNT-CHECK expected=%0d actual=%0d", expected_retired, retired_instructions);
+        end
         if (have_metrics) begin
             cpi_proxy = (executed_non_nop_proxy == 0) ? 0.0 : (1.0 * cycles) / executed_non_nop_proxy;
-            $display("BENCHMARK-METRICS cycles=%0d executed_non_nop_proxy=%0d stall_cycles=%0d loads=%0d stores=%0d CPI_proxy=%0.3f",
-                     cycles, executed_non_nop_proxy, stall_cycles, load_count, store_count, cpi_proxy);
+            cpi_arch = (retired_instructions == 0) ? 0.0 : (1.0 * cycles) / retired_instructions;
+            $display("BENCHMARK-METRICS cycles=%0d retired_instructions=%0d CPI_arch=%0.3f executed_non_nop_proxy=%0d stall_cycles=%0d loads=%0d stores=%0d CPI_proxy=%0.3f",
+                     cycles, retired_instructions, cpi_arch, executed_non_nop_proxy, stall_cycles, load_count, store_count, cpi_proxy);
         end
         #19;
         // Emit the DUT's signature words in the same format as ACT4's Sail
