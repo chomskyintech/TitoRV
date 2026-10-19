@@ -7,6 +7,7 @@ on:
       - benchmark/metrics-honesty
       - benchmark/architectural-retirement-counter
       - benchmark/retirement-counter
+      - verification/retirement-controlflow
       - master
   workflow_dispatch:
 
@@ -62,19 +63,28 @@ jobs:
             printf '%s,"%s"\n' "$name" "$metrics" >> benchmark-results/summary.csv
           done
 
-          echo "=== Building retirement_count ==="
-          riscv64-unknown-elf-gcc \
-            -march=rv32i -mabi=ilp32 -nostdlib -nostartfiles \
-            -fno-pic -fno-pie -Wl,-Ttext=0 -Wl,--no-relax -Wl,-e,_start \
-            -o /tmp/titorv-retirement_count.elf verification/benchmarks/retirement_count.S
-          riscv64-unknown-elf-objcopy -O binary /tmp/titorv-retirement_count.elf /tmp/titorv-retirement_count.bin
-          python3 verification/bin_to_hex.py /tmp/titorv-retirement_count.bin /tmp/titorv-retirement_count.hex
-          timeout 20s vvp /tmp/titorv-benchmark.vvp "+ROM=/tmp/titorv-retirement_count.hex" +METRICS +EXPECTED_RETIRED=10 2>&1 | tee benchmark-results/retirement_count.log
-          grep -F "RETIREMENT-COUNT-CHECK expected=10 actual=10" benchmark-results/retirement_count.log
-          grep -F "PASS: ELF program wrote the PASS token" benchmark-results/retirement_count.log
-          metrics="$(grep -F 'BENCHMARK-METRICS ' benchmark-results/retirement_count.log)"
-          test -n "$metrics"
-          printf '%s,"%s"\n' "retirement_count" "$metrics" >> benchmark-results/summary.csv
+          for name in retirement_count retirement_controlflow; do
+            echo "=== Building ${name} ==="
+            riscv64-unknown-elf-gcc \
+              -march=rv32i -mabi=ilp32 -nostdlib -nostartfiles \
+              -fno-pic -fno-pie -Wl,-Ttext=0 -Wl,--no-relax -Wl,-e,_start \
+              -o "/tmp/titorv-${name}.elf" "verification/benchmarks/${name}.S"
+            riscv64-unknown-elf-objcopy -O binary "/tmp/titorv-${name}.elf" "/tmp/titorv-${name}.bin"
+            python3 verification/bin_to_hex.py "/tmp/titorv-${name}.bin" "/tmp/titorv-${name}.hex"
+            expected=10
+            if [ "$name" = retirement_controlflow ]; then expected=12; fi
+            log="benchmark-results/${name}.log"
+            timeout 20s vvp /tmp/titorv-benchmark.vvp "+ROM=/tmp/titorv-${name}.hex" +METRICS "+EXPECTED_RETIRED=$expected" 2>&1 | tee "$log"
+            grep -F "RETIREMENT-COUNT-CHECK expected=$expected actual=$expected" "$log"
+            grep -F "PASS: ELF program wrote the PASS token" "$log"
+            metrics="$(grep -F 'BENCHMARK-METRICS ' "$log")"
+            test -n "$metrics"
+            if [ "$name" = retirement_controlflow ]; then
+              # This directed program must exercise AXI stalls, not merely report a count.
+              echo "$metrics" | grep -Eq 'stall_cycles=[1-9][0-9]*'
+            fi
+            printf '%s,"%s"\n' "$name" "$metrics" >> benchmark-results/summary.csv
+          done
 
           echo "### TitoRV baseline microbenchmarks" >> "$GITHUB_STEP_SUMMARY"
           echo 'CPI_arch is simulated RTL cycles divided by the core retirement-completion event count. Ordinary instructions complete at execute; loads/stores complete on AXI response handshakes. Injected flush bubbles are excluded, while architectural NOP instructions are counted. CPI_proxy remains for continuity only. These are RTL simulation measurements, not clock-frequency or silicon performance results.' >> "$GITHUB_STEP_SUMMARY"
