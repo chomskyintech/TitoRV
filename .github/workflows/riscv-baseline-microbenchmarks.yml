@@ -6,6 +6,7 @@ on:
       - verification/alu-boundary-regression
       - benchmark/metrics-honesty
       - benchmark/architectural-retirement-counter
+      - benchmark/retirement-counter
       - master
   workflow_dispatch:
 
